@@ -1,0 +1,83 @@
+/* Schriften
+ *
+ * IBM Plex, ausgeliefert von diesem Server statt von Google.
+ *
+ * Grund: Beim Einbinden ueber fonts.googleapis.com laedt der Browser des
+ * Besuchers die Schrift direkt bei Google - und uebertraegt dabei dessen
+ * IP-Adresse dorthin. Das LG Muenchen I hat das 2022 als Verstoss gegen
+ * die DSGVO gewertet (Az. 3 O 17493/20); seitdem wird deswegen abgemahnt.
+ * Wer die Schriften selbst ausliefert, braucht dafuer weder eine
+ * Einwilligung noch einen Cookie-Banner.
+ *
+ * Verwendet werden die Latin-1-Teilsaetze: sie decken Deutsch samt
+ * Umlauten und Eszett ab und sind zusammen rund 200 KB - deutlich weniger
+ * als der vollstaendige Zeichensatz mit Kyrillisch und Griechisch.
+ *
+ * IBM Plex steht unter der SIL Open Font License 1.1
+ * (siehe schriften/IBM-Plex-LICENSE.txt).
+ */
+
+/* font-display: swap - der Text ist sofort in der Ersatzschrift lesbar und
+   wird nachtraeglich ausgetauscht, statt beim Laden unsichtbar zu bleiben. */
+
+/* ---------- IBM Plex Sans ---------- */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('schriften/IBMPlexSans-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('schriften/IBMPlexSans-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('schriften/IBMPlexSans-SemiBold.woff2') format('woff2');
+}
+
+/* ---------- IBM Plex Serif ---------- */
+@font-face {
+  font-family: 'IBM Plex Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('schriften/IBMPlexSerif-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Serif';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('schriften/IBMPlexSerif-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Serif';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('schriften/IBMPlexSerif-SemiBold.woff2') format('woff2');
+}
+
+/* ---------- IBM Plex Mono ---------- */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('schriften/IBMPlexMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('schriften/IBMPlexMono-Medium.woff2') format('woff2');
+}

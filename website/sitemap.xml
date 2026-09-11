@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Vor dem Hochladen die Domain und das Datum anpassen. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://smartsearch-app.com/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://smartsearch-app.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://smartsearch-app.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://smartsearch-app.com/"/>
+    <lastmod>2026-09-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://smartsearch-app.com/en/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://smartsearch-app.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://smartsearch-app.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://smartsearch-app.com/"/>
+    <lastmod>2026-09-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://smartsearch-app.com/aenderungen.html</loc>
+    <lastmod>2026-09-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://smartsearch-app.com/datenschutz.html</loc>
+    <lastmod>2026-09-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://smartsearch-app.com/impressum.html</loc>
+    <lastmod>2026-09-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://smartsearch-app.com/nutzungsbedingungen.html</loc>
+    <lastmod>2026-09-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>

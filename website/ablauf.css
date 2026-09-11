@@ -1,0 +1,340 @@
+/* ---------------------------------------------------------------
+   Vorführung beim Scrollen.
+
+   Das Fenster bleibt stehen, während die Erklärung daran vorbeizieht.
+   Jeder Textabschnitt schaltet das Fenster in einen anderen Zustand:
+   Seitenleiste aufklappen, Ordner einlesen, tippen, Treffer.
+
+   Bewusst als HTML nachgebaut statt als Video: gestochen scharf auf
+   jedem Bildschirm, ein Bruchteil der Datenmenge, und es funktioniert
+   ohne Abspielknopf.
+   --------------------------------------------------------------- */
+
+.ablauf { border-top: 1px solid var(--linie); padding: 0; }
+.ablauf-raster {
+  display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 60px;
+  align-items: start;
+}
+
+/* Linke Spalte: die Erklärung, ein Abschnitt je Zustand */
+.ablauf-text { padding: 90px 0; }
+.schritt {
+  min-height: 78vh; display: flex; flex-direction: column; justify-content: center;
+  opacity: .32; transition: opacity .4s ease;
+}
+.schritt.aktiv { opacity: 1; }
+.schritt .nr {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11.5px; letter-spacing: .12em; color: var(--akzent); margin-bottom: 12px;
+}
+.schritt h3 {
+  font-family: 'IBM Plex Serif', Georgia, serif;
+  font-size: 22px; font-weight: 600; margin-bottom: 12px; line-height: 1.25;
+}
+.schritt p { font-size: 15.5px; line-height: 1.68; color: var(--gedaempft); }
+
+/* Rechte Spalte: das Fenster bleibt beim Scrollen stehen */
+.ablauf-buehne { position: sticky; top: 96px; padding: 90px 0; }
+
+/* ---------- Nachbau der Oberfläche ---------- */
+.app {
+  background: #14161a; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 20px 55px rgba(23,29,28,.22);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: #e8e8e8; user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app { box-shadow: 0 20px 55px rgba(0,0,0,.55); }
+}
+.app-leiste {
+  height: 40px; background: #2d323a; display: flex; align-items: center;
+  padding: 0 14px; position: relative;
+}
+.app-ampel { width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; }
+.a-rot { background: #ff5f57; } .a-gelb { background: #febc2e; } .a-gruen { background: #28c840; }
+.app-titel {
+  position: absolute; left: 0; right: 0; text-align: center;
+  font-size: 12.5px; font-weight: 700; color: #d2d6dd;
+}
+
+.app-koerper { display: flex; padding: 9px; gap: 9px; min-height: 430px; }
+
+/* Seitenleiste: zugeklappt Breite 0, aufgeklappt 190px */
+.app-seite {
+  background: #1c1f25; border-radius: 9px;
+  width: 0; opacity: 0; padding: 0; overflow: hidden;
+  transition: width .5s cubic-bezier(.22,.9,.3,1), opacity .35s ease, padding .5s ease;
+  flex-shrink: 0;
+}
+.app[data-phase="2"] .app-seite,
+.app[data-phase="3"] .app-seite { width: 172px; opacity: 1; padding: 14px 11px; }
+
+.seite-titel { font-size: 12.5px; font-weight: 700; margin-bottom: 12px; white-space: nowrap; }
+.seite-knopf {
+  background: #37474f; border-radius: 7px; padding: 9px 12px;
+  font-size: 12px; color: #dcdcdc; margin-bottom: 7px; white-space: nowrap;
+}
+.seite-knopf.betont { background: #cf3d22; color: #fff; }
+
+.app-haupt { background: #1c1f25; border-radius: 9px; padding: 15px 16px; flex: 1; min-width: 0; }
+
+.app-suchzeile { display: flex; gap: 10px; align-items: center; }
+.app-burger { color: #98a0ac; font-size: 16px; padding: 0 3px; }
+.app-feld {
+  flex: 1; background: #23272e; border-radius: 7px; padding: 11px 14px;
+  font-size: 14.5px; color: #f0f0f0; min-height: 41px;
+}
+.app-feld .leer { color: #98a0ac; }
+.app-cursor {
+  display: inline-block; width: 1.5px; height: 15px; background: #cf3d22;
+  vertical-align: -2px; animation: appblink 1.05s step-end infinite;
+}
+@keyframes appblink { 50% { opacity: 0; } }
+.app-suchen {
+  background: #cf3d22; color: #fff; font-size: 13.5px; font-weight: 700;
+  padding: 11px 20px; border-radius: 7px;
+}
+
+/* Filterleiste.
+   Vorher schrumpften die Kaestchen auf zwei Pixel zusammen und der
+   Zeitraum-Knopf wurde rechts aus dem Fenster gedraengt, sobald die
+   Seitenleiste Platz wegnahm - er hatte dann keinen rechten Rand mehr
+   und sein Text brach zweizeilig um. Jetzt schrumpft nichts mehr;
+   reicht der Platz nicht, rutscht der Knopf in die naechste Zeile. */
+.app-filter {
+  display: flex; align-items: center; flex-wrap: wrap;
+  column-gap: 20px; row-gap: 10px; margin: 14px 2px 12px;
+}
+.app-kasten {
+  width: 16px; height: 16px; border: 1.5px solid #6e7a83;
+  border-radius: 4px; flex-shrink: 0;
+}
+.app-filter > span { font-size: 12px; color: #cfd5d9; flex-shrink: 0; }
+.app-zeitraum {
+  margin-left: auto; background: #23272e; color: #d2d6dd; font-size: 11.5px;
+  padding: 6px 12px; border-radius: 6px; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Bereich, der je nach Zustand wechselt */
+.app-bereich { position: relative; min-height: 250px; }
+.app-lage {
+  position: absolute; inset: 0;
+  opacity: 0; visibility: hidden; transition: opacity .4s ease;
+}
+.app-lage.sichtbar { opacity: 1; visibility: visible; }
+
+.app-ruhe {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: #98a0ac; font-size: 13.5px; text-align: center; line-height: 1.7;
+}
+
+/* Fortschritt beim Einlesen */
+.app-fortschritt { padding: 26px 4px; }
+.app-fortschritt .zeile { font-size: 12.5px; color: #98a0ac; margin-bottom: 12px; }
+.app-balken { height: 7px; background: #2d323a; border-radius: 4px; overflow: hidden; }
+.app-balken i { display: block; height: 100%; width: 0; background: #cf3d22; border-radius: 4px; }
+.app[data-phase="3"] .app-balken i { width: 68%; transition: width 2.4s ease; }
+
+.app-treffer > div {
+  display: flex; align-items: flex-start; gap: 11px; padding: 9px 0;
+  opacity: 0; transform: translateY(7px);
+}
+.app[data-phase="4"] .app-treffer > div { animation: apprein .45s ease forwards; }
+.app[data-phase="4"] .app-treffer > div:nth-child(1) { animation-delay: .12s; }
+.app[data-phase="4"] .app-treffer > div:nth-child(2) { animation-delay: .30s; }
+.app[data-phase="4"] .app-treffer > div:nth-child(3) { animation-delay: .48s; }
+@keyframes apprein { to { opacity: 1; transform: none; } }
+
+.t-typ {
+  background: #a8412c; color: #fff; font-size: 10.5px; font-weight: 700;
+  padding: 6px 8px; border-radius: 5px; flex-shrink: 0;
+}
+.t-inhalt { min-width: 0; flex: 1; display: block; }
+.t-name { display: block; color: #e6e9eb; font-size: 13.5px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-vorschau { display: block; color: #98a0ac; font-size: 11.5px;
+  margin-top: 3px; line-height: 1.5; }
+.t-knoepfe { display: flex; gap: 5px; flex-shrink: 0; }
+/* Jede Endung ihren Ton, wie in BADGE_FARBEN in farben.py. */
+.t-typ.docx { background: #3d5a80; }
+.t-typ.xlsx { background: #4a6b52; }
+.t-knopf { background: #37474f; color: #dfe4e8; font-size: 10.5px; padding: 5px 9px; border-radius: 5px; }
+.t-knopf.blau { background: #cf3d22; color: #fff; }
+.app-status { font-size: 11.5px; color: #98a0ac; margin-top: 12px; }
+
+/* ---------- Schmale Bildschirme ---------- */
+@media (max-width: 900px) {
+  /* minmax(0, 1fr) statt 1fr: sonst bestimmt der Mindestinhalt des
+     nachgebauten Fensters die Spaltenbreite und schiebt die ganze
+     Seite über den rechten Rand hinaus. */
+  .ablauf-raster { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  /* Auf schmalen Bildschirmen gehoert das Fenster nach oben und bleibt
+     dort stehen, waehrend die Erklaerung darunter durchlaeuft. Im
+     Quelltext steht es hinter dem Text - order dreht das nur fuer die
+     Darstellung um, damit die Vorlesereihenfolge sinnvoll bleibt. */
+  .ablauf-buehne { order: -1; position: sticky; top: 62px; z-index: 2;
+    padding: 16px 0 22px; background: var(--papier);
+    box-shadow: 0 12px 16px -12px rgba(23,29,28,.18); }
+  .ablauf-text { padding: 8px 0 50px; }
+  .schritt { min-height: 62vh; }
+  .app-koerper { min-height: 340px; }
+  .app-bereich { min-height: 190px; }
+  .t-knoepfe { display: none; }
+  .app-filter { gap: 12px; flex-wrap: wrap; }
+  .app-filter span { font-size: 11px; }
+  .app-zeitraum { margin-left: 0; }
+  .app-suchen { padding: 11px 14px; font-size: 12.5px; }
+  .app-feld { font-size: 13px; padding: 10px 11px; }
+  .seite-knopf, .seite-titel { white-space: normal; }
+  .app[data-phase="2"] .app-seite,
+  .app[data-phase="3"] .app-seite { width: 148px; padding: 12px 10px; }
+}
+
+/* Wer weniger Bewegung wünscht, bekommt den Endzustand ohne Übergänge. */
+@media (prefers-reduced-motion: reduce) {
+  .app-seite { transition: none; }
+  .app-lage { transition: none; }
+  .app-treffer > div { opacity: 1; transform: none; animation: none !important; }
+  .app-balken i { transition: none; }
+  .app-cursor { animation: none; }
+  .schritt { opacity: 1; }
+}
+
+/* ---------- Sehr schmale Bildschirme ----------
+   Nebeneinander reicht der Platz nicht: bei aufgeklappter Seitenleiste
+   brach die Suchzeile auf drei Zeilen um und die Schaltflaeche lief aus
+   dem Fenster. Deshalb legt sich die Seitenleiste hier ueber den
+   Inhalt, statt ihn zusammenzuschieben - so wie es Programme auf
+   schmalen Fenstern ohnehin handhaben. */
+@media (max-width: 560px) {
+  .app-koerper { position: relative; }
+  .app-seite {
+    position: absolute; left: 9px; top: 9px; bottom: 9px; z-index: 2;
+    width: 172px; padding: 14px 12px; opacity: 1;
+    transform: translateX(-108%);
+    transition: transform .45s cubic-bezier(.22,.9,.3,1);
+    box-shadow: 6px 0 22px rgba(0,0,0,.4);
+  }
+  .app[data-phase="2"] .app-seite,
+  .app[data-phase="3"] .app-seite {
+    width: 172px; padding: 14px 12px; transform: translateX(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-seite { transition: none; }
+  }
+}
+
+/* ---------- Zusätzliche Zustände ---------- */
+
+/* Vorschau: das Dokument legt sich über die Trefferliste */
+.app-treffer.gedimmt { opacity: .35; }
+.app-quicklook {
+  position: absolute; left: 14%; right: 14%; top: 6px; bottom: 6px;
+  background: #f4f4f2; border-radius: 8px; overflow: hidden;
+  box-shadow: 0 14px 40px rgba(0,0,0,.5);
+  display: flex; flex-direction: column;
+  opacity: 0; transform: scale(.965);
+  transition: opacity .32s ease, transform .32s ease;
+}
+.app[data-phase="5"] .app-quicklook { opacity: 1; transform: none; }
+.ql-kopf {
+  background: #e2e2df; padding: 7px 11px; display: flex; align-items: center;
+  justify-content: space-between; font-size: 10.5px; color: #4a4a48;
+}
+.ql-x { font-size: 14px; color: #83837f; }
+.ql-blatt { flex: 1; background: #fff; margin: 9px; padding: 13px; }
+.ql-zeile {
+  display: block; height: 5px; background: #dcdcd8;
+  border-radius: 2px; margin-bottom: 8px;
+}
+.ql-zeile.w85 { width: 85%; } .ql-zeile.w80 { width: 80%; }
+.ql-zeile.w70 { width: 70%; } .ql-zeile.w60 { width: 60%; }
+.ql-zeile.w55 { width: 55%; } .ql-zeile.w45 { width: 45%; }
+.ql-zeile.w35 { width: 35%; } .ql-zeile.w0  { width: 0; margin-bottom: 14px; }
+
+/* Ähnliche Dokumente */
+.app-hinweiszeile {
+  font-size: 11.5px; color: #98a0ac; padding: 2px 0 8px;
+  border-bottom: 1px solid #2d323a; margin-bottom: 4px;
+}
+.app[data-phase="6"] .app-treffer > div { animation: apprein .45s ease forwards; }
+.app[data-phase="6"] .app-treffer > div:nth-child(1) { animation-delay: .10s; }
+.app[data-phase="6"] .app-treffer > div:nth-child(2) { animation-delay: .26s; }
+.app[data-phase="6"] .app-treffer > div:nth-child(3) { animation-delay: .42s; }
+
+/* Einstellungsfenster */
+.app-einstellungen { height: 100%; display: flex; flex-direction: column; }
+.ein-reiter { display: flex; gap: 4px; margin-bottom: 12px; }
+.ein-reiter span {
+  font-size: 11px; color: #98a0ac; padding: 6px 11px;
+  border-radius: 6px; background: #37474f;
+}
+.ein-reiter .aktiv { background: #cf3d22; color: #fff; font-weight: 700; }
+.ein-inhalt { flex: 1; }
+.ein-titel { font-size: 13px; font-weight: 700; color: #f2f3f5; margin-bottom: 10px; }
+.ein-zeile { font-size: 11.5px; color: #98a0ac; line-height: 1.6; margin-bottom: 9px; }
+.ein-zeile b { color: #cfd6db; }
+
+@media (max-width: 560px) {
+  .app-quicklook { left: 6%; right: 6%; }
+  .ein-reiter { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-quicklook { transition: none; }
+}
+
+/* ---------- Menüzeile über dem Fenster ----------
+   Im Ausgangszustand ist nur sie zu sehen: SmartSearch sitzt als Lupe
+   rechts oben und wird von dort hervorgeholt. Das ist der Weg, den die
+   meisten täglich nehmen - er fehlte in der Vorführung. */
+.mac-menue {
+  display: flex; align-items: center; gap: 20px;
+  background: rgba(48,48,48,.94); border-radius: 8px;
+  padding: 0 14px; height: 30px; margin-bottom: 14px;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 11.5px; color: #d6d6d6; user-select: none;
+}
+.mm-apfel { width: 11px; height: 13px; opacity: .8; }
+.mm-eintrag { opacity: .72; }
+.mm-rechts { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.mm-lupe {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px; color: #d6d6d6;
+  transition: background .3s ease, color .3s ease, transform .3s ease;
+}
+.mm-lupe svg { width: 13px; height: 13px; }
+
+/* Im ersten Zustand wird die Lupe hervorgehoben - dort setzt der Klick an. */
+.ablauf-buehne[data-phase="0"] .mm-lupe {
+  background: #cf3d22; color: #fff; transform: scale(1.12);
+}
+.ablauf-buehne[data-phase="0"] .mm-lupe::after {
+  content: ""; position: absolute; width: 22px; height: 22px;
+  border-radius: 5px; border: 2px solid #cf3d22;
+  animation: lupenpuls 1.8s ease-out infinite;
+}
+@keyframes lupenpuls {
+  0%   { transform: scale(1);   opacity: .9; }
+  70%  { transform: scale(2.1); opacity: 0; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+.mm-lupe { position: relative; }
+
+/* Das Fenster klappt aus der Menüzeile heraus auf. */
+.app {
+  transform-origin: top right;
+  transition: opacity .42s ease, transform .42s cubic-bezier(.2,.9,.3,1);
+}
+/* Zustand 0: das Fenster ist noch nicht hervorgeholt. Vorher stand es
+   auf opacity 0 - dadurch blieb beim Eintritt in die Vorfuehrung ein
+   mehrere hundert Pixel hohes Loch unter der Menuezeile stehen. Jetzt
+   ist es schwach angedeutet: der Aufklapp-Effekt bleibt, die Leerstelle
+   verschwindet. */
+.app[data-phase="0"] {
+  opacity: .18; transform: scale(.955) translateY(-8px); pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app, .app[data-phase="0"] { transition: none; opacity: 1; transform: none; }
+  .ablauf-buehne[data-phase="0"] .mm-lupe::after { animation: none; }
+}

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>SmartSearch – Search your Mac documents by what they say</title>
+<meta name="description" content="SmartSearch finds files on your Mac from a description instead of a filename. Entirely local, no account, free. For PDF, Word, Excel and scanned documents.">
+
+<link rel="canonical" href="https://smartsearch-app.com/en/">
+<link rel="alternate" hreflang="de" href="https://smartsearch-app.com/">
+<link rel="alternate" hreflang="en" href="https://smartsearch-app.com/en/">
+<link rel="alternate" hreflang="x-default" href="https://smartsearch-app.com/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SmartSearch">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="de_DE">
+<meta property="og:url" content="https://smartsearch-app.com/en/">
+<meta property="og:title" content="SmartSearch – Search your Mac documents by what they say">
+<meta property="og:description" content="Finds files from a description instead of a filename. Entirely local on your Mac, no account, free.">
+<meta property="og:image" content="https://smartsearch-app.com/vorschaubild.png">
+<meta property="og:image:alt" content="The SmartSearch window with three results whose filenames contain none of the search terms.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SmartSearch – Search your Mac documents by what they say">
+<meta name="twitter:description" content="Finds files from a description instead of a filename. Entirely local, no account, free.">
+<meta name="twitter:image" content="https://smartsearch-app.com/vorschaubild.png">
+
+<meta name="theme-color" content="#f7f7f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)">
+
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+
+<link rel="stylesheet" href="../schriften.css">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../ablauf.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SmartSearch",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "macOS 12.0 or later",
+  "softwareVersion": "1.0.1",
+  "fileSize": "296MB",
+  "inLanguage": ["de", "en"],
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "description": "Searches documents on your Mac by content instead of by filename. Works entirely locally, with no data transfer."
+}
+</script>
+</head>
+<body>
+
+<a class="springen" href="#inhalt">Skip to content</a>
+
+<header>
+  <div class="bahn kopf">
+    <a href="index.html" class="marke">Smart<span>Search</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#umfang">What’s included</a>
+      <a href="#daten">Your data</a>
+      <a href="#fragen">Questions</a>
+      <a href="#laden">Download</a>
+      <a class="sprache" href="../index.html" hreflang="de" lang="de">Deutsch</a>
+    </nav>
+  </div>
+</header>
+
+<main id="inhalt">
+
+<div class="bahn">
+  <div class="auftakt">
+    <div class="auftakt-text">
+
+    <h1>You know what it says.<br>You just can’t recall <em>what it’s called.</em></h1>
+    <p class="vorspann">
+      System search compares strings of characters. SmartSearch reads what your
+      documents are about and finds them from a description — entirely on your
+      Mac, without a single file ever leaving it.
+    </p>
+
+    <div class="laden">
+      <a class="knopf" href="#laden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M12 3v13"></path><path d="M7 12l5 5 5-5"></path><path d="M4 21h16"></path>
+        </svg>
+        Download for Mac
+      </a>
+      <p class="dabei">
+        <b>Free · Version 1.0.1 · 296 MB</b><br>
+        macOS 12 or later · Apple Silicon and Intel
+      </p>
+    </div>
+    </div>
+  </div>
+
+  <figure class="schaustueck">
+    <picture>
+      <source media="(max-width: 700px)" type="image/avif"
+              srcset="../auftakt-fenster-schmal.avif" width="770" height="360">
+      <source media="(max-width: 700px)" type="image/webp"
+              srcset="../auftakt-fenster-schmal.webp" width="770" height="360">
+      <source media="(max-width: 700px)" srcset="../auftakt-fenster-schmal.png"
+              width="770" height="360">
+      <source type="image/avif" srcset="../auftakt-fenster.avif"
+              width="1713" height="932">
+      <source type="image/webp" srcset="../auftakt-fenster.webp"
+              width="1713" height="932">
+      <img src="../auftakt-fenster.png" width="1713" height="932"
+           fetchpriority="high" decoding="async"
+           alt="The SmartSearch window. The query reads “Thomas Berger”.
+                The results are dok_2024_02_18.pdf, Scan_20231114_0003.pdf and
+                CCF_000141.pdf — a car insurance policy, a rental agreement and a
+                donation receipt. No filename says what is inside.">
+    </picture>
+    <figcaption>
+      Five results — and not one filename that tells you anything. They are
+      found anyway, because SmartSearch reads what is inside the documents.
+      The number in front of the name says how well the result matches.
+      (Shown with German sample documents; the program runs in English too.)
+    </figcaption>
+  </figure>
+</div>
+
+<section class="ablauf" id="ablauf" aria-label="How it works in practice">
+  <div class="bahn ablauf-raster">
+
+    <div class="ablauf-text">
+      <div class="schritt aktiv" data-phase="0">
+        <p class="nr">01</p>
+        <h3>Always one gesture away</h3>
+        <p>SmartSearch sits in the menu bar. A click on the magnifier brings the
+        window forward — or Command-Shift-F, from inside any application,
+        without interrupting what you were doing.</p>
+      </div>
+
+      <div class="schritt" data-phase="1">
+        <p class="nr">02</p>
+        <h3>An empty window</h3>
+        <p>After launch there is nothing but a search field. No account, no sign-in,
+        no setup wizard to click through first.</p>
+      </div>
+
+      <div class="schritt" data-phase="2">
+        <p class="nr">03</p>
+        <h3>Choose your folders</h3>
+        <p>The actions live on the left. You decide which folders are searched —
+        Documents, Desktop, a project folder on an external drive. As many as you
+        like, changeable at any time.</p>
+      </div>
+
+      <div class="schritt" data-phase="3">
+        <p class="nr">04</p>
+        <h3>Read in once</h3>
+        <p>SmartSearch works through the folders and notes what each document is
+        about. That takes a few minutes and happens only once — after that,
+        changes are picked up on their own.</p>
+      </div>
+
+      <div class="schritt" data-phase="4">
+        <p class="nr">05</p>
+        <h3>Describe instead of name</h3>
+        <p>You type what it was about. The results appear straight away, with the
+        matching passage from the text — even when the filename contains none of
+        it.</p>
+      </div>
+
+      <div class="schritt" data-phase="5">
+        <p class="nr">06</p>
+        <h3>Look inside without opening</h3>
+        <p>A click on “Preview” shows the document without starting Word or the
+        PDF viewer. With twenty results that saves twenty application
+        launches.</p>
+      </div>
+
+      <div class="schritt" data-phase="6">
+        <p class="nr">07</p>
+        <h3>And what belongs with it</h3>
+        <p>“Similar” takes one result as a starting point and looks for documents
+        that belong with it. That way you find the whole matter, not just one
+        sheet from it.</p>
+      </div>
+
+      <div class="schritt" data-phase="7">
+        <p class="nr">08</p>
+        <h3>Read what actually happens</h3>
+        <p>The settings state openly what is done with your files — alongside
+        language, launch at login and backing up your settings.</p>
+      </div>
+    </div>
+
+    <div class="ablauf-buehne" data-phase="0">
+      <div class="mac-menue" aria-hidden="true">
+        <svg class="mm-apfel" viewBox="0 0 14 16" fill="currentColor" aria-hidden="true"><path d="M11.2 8.5c0-1.6 1.3-2.4 1.4-2.4-.8-1.1-2-1.3-2.4-1.3-1-.1-2 .6-2.5.6s-1.3-.6-2.2-.6c-1.1 0-2.2.7-2.8 1.7-1.2 2-.3 5 .8 6.6.6.8 1.2 1.7 2.1 1.7.9 0 1.2-.5 2.2-.5s1.3.5 2.2.5c.9 0 1.5-.8 2.1-1.6.7-.9.9-1.8.9-1.9 0 0-1.8-.7-1.8-2.8zM9.5 3.3c.5-.6.8-1.4.7-2.3-.7 0-1.5.5-2 1.1-.4.5-.8 1.4-.7 2.2.8.1 1.6-.4 2-1z"/></svg>
+        <span class="mm-eintrag">Finder</span>
+        <span class="mm-eintrag">File</span>
+        <span class="mm-eintrag">Edit</span>
+        <span class="mm-rechts">
+          <span class="mm-lupe" id="mmLupe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                 stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle>
+                 <path d="M20 20l-4-4"></path></svg>
+          </span>
+          <span class="mm-eintrag">100 %</span>
+          <span class="mm-eintrag">Thu 14:22</span>
+        </span>
+      </div>
+
+      <div class="app" id="app" data-phase="0" aria-hidden="true">
+        <div class="app-leiste">
+          <i class="app-ampel a-rot"></i><i class="app-ampel a-gelb"></i><i class="app-ampel a-gruen"></i>
+          <span class="app-titel">SmartSearch</span>
+        </div>
+
+        <div class="app-koerper">
+          <div class="app-seite">
+            <p class="seite-titel">Actions</p>
+            <p class="seite-knopf betont">Add folder</p>
+            <p class="seite-knopf">Manage folders</p>
+            <p class="seite-knopf">Update index</p>
+            <p class="seite-knopf">Favourites</p>
+            <p class="seite-knopf">Settings …</p>
+          </div>
+
+          <div class="app-haupt">
+            <div class="app-suchzeile">
+              <span class="app-burger">&#9776;</span>
+              <div class="app-feld" id="appFeld"><span class="leer">What are you looking for?</span></div>
+              <span class="app-suchen">Search</span>
+            </div>
+
+            <div class="app-filter">
+              <i class="app-kasten"></i><span>PDF</span>
+              <i class="app-kasten"></i><span>Word</span>
+              <i class="app-kasten"></i><span>Excel</span>
+              <i class="app-kasten"></i><span>Text</span>
+              <span class="app-zeitraum">Any date</span>
+            </div>
+
+            <div class="app-bereich">
+              <div class="app-lage sichtbar" data-lage="ruhe">
+                <div class="app-ruhe">Ready.<br>Type above what you are looking for.</div>
+              </div>
+
+              <div class="app-lage" data-lage="einlesen">
+                <div class="app-fortschritt">
+                  <p class="zeile">Indexing 1,842 of 2,710: Invoice February.pdf</p>
+                  <div class="app-balken"><i></i></div>
+                  <p class="zeile" style="margin:12px 0 0">You can already search.</p>
+                </div>
+              </div>
+
+              <div class="app-lage" data-lage="treffer">
+                <div class="app-treffer">
+                  <div>
+                    <span class="t-typ">PDF</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.87] 0027_260720113433_001.pdf</span>
+                      <span class="t-vorschau">“Sample Company Ltd · Invoice number 2026003178 · Canon iR 1643iF…”</span>
+                    </span>
+                    <span class="t-knoepfe">
+                      <span class="t-knopf blau">Open</span><span class="t-knopf">In Finder</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span class="t-typ">PDF</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.71] Scan 14.03.pdf</span>
+                      <span class="t-vorschau">“Office equipment service contract · Meter reading · A4 black and white…”</span>
+                    </span>
+                    <span class="t-knoepfe">
+                      <span class="t-knopf blau">Open</span><span class="t-knopf">In Finder</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span class="t-typ docx">DOCX</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.64] Filing_final_v3.docx</span>
+                      <span class="t-vorschau">“Quotation multifunction system · Delivery and installation…”</span>
+                    </span>
+                    <span class="t-knoepfe">
+                      <span class="t-knopf blau">Open</span><span class="t-knopf">In Finder</span>
+                    </span>
+                  </div>
+                </div>
+                <p class="app-status">6 results</p>
+              </div>
+
+              <div class="app-lage" data-lage="vorschau">
+                <div class="app-treffer gedimmt">
+                  <div>
+                    <span class="t-typ">PDF</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.87] 0027_260720113433_001.pdf</span>
+                      <span class="t-vorschau">“Sample Company Ltd · Invoice number 2026003178…”</span>
+                    </span>
+                  </div>
+                </div>
+                <div class="app-quicklook">
+                  <div class="ql-kopf"><span>0027_260720113433_001.pdf</span><span class="ql-x">&times;</span></div>
+                  <div class="ql-blatt">
+                    <span class="ql-zeile w60"></span>
+                    <span class="ql-zeile w35"></span>
+                    <span class="ql-zeile w0"></span>
+                    <span class="ql-zeile w80"></span>
+                    <span class="ql-zeile w70"></span>
+                    <span class="ql-zeile w45"></span>
+                    <span class="ql-zeile w0"></span>
+                    <span class="ql-zeile w85"></span>
+                    <span class="ql-zeile w55"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="app-lage" data-lage="aehnlich">
+                <p class="app-hinweiszeile">Similar to: 0027_260720113433_001.pdf</p>
+                <div class="app-treffer">
+                  <div>
+                    <span class="t-typ">PDF</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.81] Delivery note 483997.pdf</span>
+                      <span class="t-vorschau">“Collected in person · Serial number · Receipt confirmed…”</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span class="t-typ docx">DOCX</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.76] Quotation AU423996.docx</span>
+                      <span class="t-vorschau">“Multifunction system · Installation · On-site introduction…”</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span class="t-typ">PDF</span>
+                    <span class="t-inhalt">
+                      <span class="t-name">[0.68] Service contract 2026.pdf</span>
+                      <span class="t-vorschau">“Meter reading · Toner supply · Term 36 months…”</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="app-lage" data-lage="einstellungen">
+                <div class="app-einstellungen">
+                  <div class="ein-reiter">
+                    <span>General</span><span>Help</span><span>Backup</span>
+                    <span class="aktiv">Privacy</span>
+                  </div>
+                  <div class="ein-inhalt">
+                    <p class="ein-titel">Your data stays on your Mac</p>
+                    <p class="ein-zeile"><b>No file leaves this Mac.</b>
+                      Every file is read locally and searched locally.</p>
+                    <p class="ein-zeile"><b>The analysis is local too.</b>
+                      There is no connection through which content could flow out.</p>
+                    <p class="ein-zeile"><b>The index stays in your hands.</b>
+                      It sits as an ordinary file in your user folder.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="prinzip">
+  <div class="bahn spalte">
+    <h2>Why this works</h2>
+    <p class="fliess">
+      During the initial read, every document is split into passages, and for each
+      passage what it is about is computed. When you later type a description, the
+      same computation is applied to your words and compared to find what fits
+      best.
+    </p>
+    <p class="fliess">
+      An example from practice: an invoice for a piece of office equipment rarely
+      contains the word “printer”. What it contains is an article number, a model
+      name and a meter reading.
+    </p>
+
+    <div class="beleg">
+      <p class="beleg-zeile"><span>You type</span>Invoice for the printer</p>
+      <p class="beleg-zeile"><span>The document says</span>001 · 0305-0135 · Canon iR 1643iF · €67.23</p>
+    </div>
+
+    <p class="fliess">
+      A search over strings of characters finds nothing here. That is why
+      SmartSearch also runs a classic keyword search alongside: names, numbers and
+      exact terms still match reliably, and the two together decide the order of
+      the results.
+    </p>
+    <p class="fliess einschraenkung">
+      Where the limit lies, said plainly: if a document contains nothing but a
+      model number and nothing else related to the term you are looking for,
+      SmartSearch will not find it either. No search model of this size carries
+      that kind of product knowledge.
+    </p>
+  </div>
+</section>
+
+<section id="umfang">
+  <div class="bahn">
+    <h2>What’s included</h2>
+    <p class="einleitung">All of it, with no account and nothing to unlock.</p>
+
+    <dl class="umfang">
+      <div>
+        <dt>Searching</dt>
+        <dd>Search by content, combined with classic keyword search. Similar
+        documents for every result. Filters by file type and date. History of
+        recent queries. Matching passages highlighted in the text.</dd>
+      </div>
+      <div>
+        <dt>Reading</dt>
+        <dd>PDF, Word, Excel, PowerPoint, text and Markdown files. Scanned PDF
+        files via the text recognition built into macOS.</dd>
+      </div>
+      <div>
+        <dt>Carrying on</dt>
+        <dd>Open with a double click, preview without the associated application,
+        reveal in Finder, favourites for documents you need again and again.</dd>
+      </div>
+      <div>
+        <dt>Keeping current</dt>
+        <dd>As many folders at once as you like. New and changed files are read in
+        on their own. You can already search while the initial read is running.
+        Files that could not be read are named rather than passed over.</dd>
+      </div>
+      <div>
+        <dt>Operating</dt>
+        <dd>Called up with Command-Shift-F from inside any application. Launch at
+        login. Light and dark appearance. German and English.</dd>
+      </div>
+      <div>
+        <dt>Keeping</dt>
+        <dd>No account, no sign-in, no usage data. Settings can be saved as a file
+        and restored on another Mac.</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<section id="daten" class="schutz">
+  <div class="bahn spalte">
+    <h2>What happens to your files</h2>
+    <p class="fliess">
+      The folders you search hold contracts, invoices, sometimes copies of ID
+      documents. So here it is in order, and with nothing left out.
+    </p>
+    <p class="fliess">
+      <strong>No file leaves your Mac.</strong> Every document is read locally and
+      searched locally. The analysis of your queries also runs offline on your own
+      machine — there is no server through which content could flow out, and no
+      account for anything to be tied to.
+    </p>
+    <p class="fliess">
+      <strong>A connection is needed twice.</strong> On first launch SmartSearch
+      downloads the search model, around 2.3 GB. And occasionally it checks
+      whether a newer version exists. In neither case is any content transmitted.
+      After that the program works without internet.
+    </p>
+    <p class="fliess">
+      <strong>The index stays in your hands.</strong> It sits as an ordinary file
+      under <code>~/Library/Application&nbsp;Support/SmartSearch/</code> and can be
+      inspected or deleted at any time.
+    </p>
+  </div>
+</section>
+
+<section id="wer">
+  <div class="bahn">
+    <h2>Who builds this</h2>
+    <div class="person">
+      <picture>
+        <source type="image/avif" srcset="../marcel.avif" width="600" height="600">
+        <source type="image/webp" srcset="../marcel.webp" width="600" height="600">
+        <img src="../marcel.jpg" width="600" height="600" loading="lazy" decoding="async"
+             alt="Portrait of Marcel Landmann">
+      </picture>
+      <div class="worte">
+        <p class="name">Marcel Landmann</p>
+        <p class="rolle">IT systems technician · Bielefeld, Germany</p>
+        <p>
+          My job involves office equipment — the machines, the service contracts
+          and the invoices that come with them. Exactly the kind of document you
+          cannot find two years later, because the file is called
+          <code>0027_260720113433_001.pdf</code> and the scanner named it that.
+        </p>
+        <p>
+          SmartSearch came out of that annoyance: that your own hard drive is
+          harder to search than half the internet. I build it alone, in my spare
+          time, and I use it myself every day.
+        </p>
+        <p>
+          <strong>That is also why this page says where the program reaches its
+          limit.</strong> If you find a bug or something is missing, write to me:
+          <a href="mailto:kontakt@smartsearch-app.com">kontakt@smartsearch-app.com</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="laden">
+  <div class="bahn spalte">
+    <h2>Download and set up</h2>
+
+    <!-- For visitors arriving from a phone - via a link from a social network,
+         say. A DMG cannot be opened there; without this notice the visit ends at
+         a button that does nothing. The card deliberately sits after the download
+         button in the markup and is moved in front of it by the script at the
+         end of the page - so the page is unchanged without JavaScript and shows
+         the download as before. -->
+    <div class="am-telefon" id="amTelefon" hidden>
+      <span class="marke-klein">You’re on a phone</span>
+      <h3>SmartSearch is a program for the Mac</h3>
+      <p>
+        It cannot be set up here. So the address does not get lost in the
+        meantime, send it to yourself — or remember it:
+      </p>
+      <p class="adresse">smartsearch-app.com</p>
+      <div class="telefon-knoepfe">
+        <a class="knopf" id="perMail" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M3 6h18v12H3z"></path><path d="M3 7l9 6 9-6"></path>
+          </svg>
+          Send the address to me
+        </a>
+        <button class="knopf-leise" id="kopieren" type="button">Copy the address</button>
+      </div>
+      <p class="trotzdem">
+        <a href="../SmartSearch.dmg">Download the file anyway</a>
+      </p>
+    </div>
+
+    <div class="laden" id="ladenBlock" style="margin-top:26px">
+      <a class="knopf" href="danke.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M12 3v13"></path><path d="M7 12l5 5 5-5"></path><path d="M4 21h16"></path>
+        </svg>
+        Download SmartSearch 1.0.1
+      </a>
+      <p class="dabei">
+        <b>296 MB · macOS 12 or later</b><br>
+        On first launch a further 2.3 GB is added for the search model.
+      </p>
+    </div>
+
+    <div class="hinweis-karte">
+      <span class="marke-klein">Please read first</span>
+      <h3>On first opening, macOS says the program cannot be opened</h3>
+      <p>
+        This message does appear, and it looks more alarming than it is. So that
+        it does not startle you: here is what it looks like.
+      </p>
+
+      <div class="dialog" role="img"
+           aria-label="Reconstruction of the macOS message: SmartSearch cannot be opened because Apple could not check it for malicious software.">
+        <div class="zeichen">!</div>
+        <p class="titel">“SmartSearch” cannot be opened</p>
+        <p class="text">
+          Apple could not verify whether “SmartSearch” contains malicious
+          software that may harm your Mac.
+        </p>
+        <div class="knopfleiste">
+          <span>Move to Bin</span>
+          <span class="haupt">Done</span>
+        </div>
+      </div>
+
+      <p>
+        <strong>What lies behind it:</strong> Apple offers to notarise programs
+        before they are distributed. That requires a developer account at 99 euros
+        a year. SmartSearch is free and does not have that account — so the
+        notarisation is missing, and macOS reports it. The phrase “could not
+        verify” is to be taken literally: nothing was found, nothing was looked
+        at. The same message appears for every program without that certificate.
+      </p>
+
+      <p><strong>How to open it anyway — three steps, once:</strong></p>
+
+      <ol class="schritte-gross">
+        <li>
+          Close the message with <b>Done</b>. Not “Move to Bin”.
+        </li>
+        <li>
+          Open <b>System Settings</b>, then <b>Privacy &amp; Security</b>. Scroll
+          all the way down.
+        </li>
+        <li>
+          Next to “SmartSearch was blocked”, click <b>Open Anyway</b> and confirm
+          with your password.
+        </li>
+      </ol>
+
+      <p class="beruhigung">
+        <b>After that it is quiet.</b> From the second launch onwards SmartSearch
+        opens like any other program. The step is a one-off and can be undone at
+        any time by moving the program to the Bin.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="fragen">
+  <div class="bahn">
+    <h2>Common questions</h2>
+    <div class="fragen">
+
+      <details>
+        <summary>Are my documents transmitted anywhere?</summary>
+        <div class="antwort">
+          <p>No. Every file is read and searched exclusively on your Mac. There is
+          no server connection through which content could flow out, and no
+          account for anything to be tied to.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Why is it 2.3 GB on first launch?</summary>
+        <div class="antwort">
+          <p>That is the model that understands your queries. For the analysis to
+          work without a cloud, it has to sit entirely on your own machine. The
+          download happens once.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Why does macOS warn me on first opening?</summary>
+        <div class="antwort">
+          <p>Because the program is not notarised by Apple. That would require a
+          developer account at 99 euros a year, and SmartSearch is free. The
+          message says nothing about the contents: Apple did not check and find
+          nothing, it did not look in the first place. How to open the program
+          anyway is described <a href="#laden">in the download section</a>.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>How long does the initial read take?</summary>
+        <div class="antwort">
+          <p>A few thousand documents take a few minutes. You can already search
+          while it runs, and new or changed files are picked up on their own
+          afterwards.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>A document isn’t being found. Why?</summary>
+        <div class="antwort">
+          <p>First check whether its folder is registered and the initial read has
+          finished. Often a file type has been deselected at the top, too.</p>
+          <p>Also describe the content, not the filename. Words that appear
+          literally in the document have the strongest effect. For invoices
+          covering equipment, the manufacturer’s name helps more than the type of
+          device.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Will SmartSearch stay free?</summary>
+        <div class="antwort">
+          <p>The scope described here stays free permanently. An extended paid
+          edition is planned for later. Anyone using the free version loses
+          nothing by it.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>How do I uninstall the program?</summary>
+        <div class="antwort">
+          <p>Move the program to the Bin and delete the folder
+          <code>~/Library/Application Support/SmartSearch/</code>. No further files
+          are left behind.</p>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="bahn fuss">
+    <p>
+      SmartSearch is a one-person project from Bielefeld, Germany. It came out of
+      the annoyance that your own hard drive is harder to search than half the
+      internet. Feedback and bug reports are welcome.
+      <span class="werkstatt">I document how it comes together on
+        <a class="tiktok" href="https://www.tiktok.com/@smartsearch_official"
+           rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M16.5 2h-3v13.2a2.7 2.7 0 1 1-2.3-2.67V9.4a5.9 5.9 0 1 0 5.3 5.87V8.9a6.7 6.7 0 0 0 3.8 1.2V7.1a3.9 3.9 0 0 1-3.8-3.9V2z"></path></svg>@smartsearch_official</a></span>
+    </p>
+    <p class="ki-hinweis">
+      The text and graphics on this page were produced with AI assistance and have
+      been checked by me and are my responsibility. There is no obligation to
+      declare this; the statement is voluntary.
+    </p>
+    <nav aria-label="Legal">
+      <a href="../aenderungen.html">Changes</a>
+      <a href="../impressum.html" hreflang="de" lang="de">Impressum</a>
+      <a href="../datenschutz.html" hreflang="de" lang="de">Datenschutz</a>
+      <a href="../nutzungsbedingungen.html" hreflang="de" lang="de">Nutzungsbedingungen</a>
+    </nav>
+    <p class="rechts-hinweis">
+      German law requires the provider identification and the privacy notice to be
+      available in German, and they are legal documents rather than marketing
+      copy. They are therefore not translated. If anything in them is unclear,
+      write to <a href="mailto:kontakt@smartsearch-app.com">kontakt@smartsearch-app.com</a>
+      and I will explain it in English.
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var app     = document.getElementById('app');
+  var feld    = document.getElementById('appFeld');
+  var schritte = document.querySelectorAll('.schritt');
+  if (!app || !schritte.length) return;
+
+  var ruhig = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var TEXT  = 'Invoice for the printer';
+
+  // Which layer in the window belongs to which state.
+  var LAGE = { '0': 'ruhe', '1': 'ruhe', '2': 'ruhe', '3': 'einlesen', '4': 'treffer',
+             '5': 'vorschau', '6': 'aehnlich', '7': 'einstellungen' };
+
+  var tippUhr = null;
+
+  function zeigeLage(name) {
+    app.querySelectorAll('.app-lage').forEach(function (el) {
+      el.classList.toggle('sichtbar', el.dataset.lage === name);
+    });
+  }
+
+  function feldLeeren() {
+    clearTimeout(tippUhr);
+    feld.innerHTML = '<span class="leer">What are you looking for?</span>';
+  }
+
+  function tippen() {
+    clearTimeout(tippUhr);
+    if (ruhig) { feld.textContent = TEXT; return; }
+    var i = 0;
+    (function weiter() {
+      feld.innerHTML = TEXT.slice(0, i) + '<span class="app-cursor"></span>';
+      i++;
+      // Uneven pace - typing at a constant rate looks mechanical.
+      if (i <= TEXT.length) tippUhr = setTimeout(weiter, 48 + Math.random() * 42);
+    })();
+  }
+
+  function setzePhase(phase) {
+    if (app.dataset.phase === phase) return;
+    app.dataset.phase = phase;
+    // The stage carries the state as well, so the menu bar can react to it -
+    // it sits outside the window.
+    app.closest('.ablauf-buehne').dataset.phase = phase;
+    zeigeLage(LAGE[phase]);
+    if (phase === '4') { tippen(); }
+    else if (phase === '5') { feld.textContent = TEXT; }
+    else if (phase === '6') { feld.textContent = 'Similar to: 0027_2607…_001.pdf'; }
+    else { feldLeeren(); }
+  }
+
+  // The section in the middle of the viewport determines the state.
+  var beobachter = new IntersectionObserver(function (eintraege) {
+    eintraege.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      schritte.forEach(function (s) { s.classList.remove('aktiv'); });
+      e.target.classList.add('aktiv');
+      setzePhase(e.target.dataset.phase);
+    });
+  }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 });
+
+  schritte.forEach(function (s) { beobachter.observe(s); });
+})();
+</script>
+
+<script>
+/* Phone or Mac?
+   A DMG helps nobody on a phone. If the check comes out negative - so, when in
+   doubt - everything stays as it is and the download button remains. iPadOS
+   reports itself as "Macintosh" in Safari; hence the additional check on the
+   number of touch points, which a real Mac does not report. */
+(function () {
+  var karte = document.getElementById('amTelefon');
+  var laden = document.getElementById('ladenBlock');
+  if (!karte || !laden) return;
+
+  var kennung = navigator.userAgent || '';
+  var telefon = /iPhone|iPod|iPad|Android|Windows Phone/i.test(kennung) ||
+                (/Macintosh/.test(kennung) && navigator.maxTouchPoints > 1);
+  if (!telefon) return;
+
+  laden.parentNode.insertBefore(karte, laden);
+  laden.hidden = true;
+  karte.hidden = false;
+
+  var adresse = 'https://smartsearch-app.com/en/';
+
+  var mail = document.getElementById('perMail');
+  mail.href = 'mailto:?subject=' + encodeURIComponent('SmartSearch for the Mac') +
+              '&body=' + encodeURIComponent(
+                'SmartSearch – search documents on your Mac by what they say.\n\n' +
+                adresse + '\n\n' +
+                'Open this address on the Mac; the download is there.');
+
+  var knopf = document.getElementById('kopieren');
+  knopf.addEventListener('click', function () {
+    var fertig = function (gut) {
+      knopf.textContent = gut ? 'Copied' : 'Please copy it by hand';
+      setTimeout(function () { knopf.textContent = 'Copy the address'; }, 2600);
+    };
+    /* In the built-in browsers of social networks the clipboard is often
+       blocked. Better to say honestly that it did not work. */
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(adresse).then(function () { fertig(true); },
+                                                  function () { fertig(false); });
+    } else {
+      fertig(false);
+    }
+  });
+})();
+</script>
+</body>
+</html>

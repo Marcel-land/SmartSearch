@@ -1,0 +1,10 @@
+# robots.txt für SmartSearch
+# Vor dem Hochladen die Domain in der Sitemap-Zeile anpassen.
+
+User-agent: *
+Allow: /
+
+# Die Fehlerseite gehört nicht in den Index.
+Disallow: /404.html
+
+Sitemap: https://smartsearch-app.com/sitemap.xml

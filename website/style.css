@@ -1,0 +1,689 @@
+/* ---------------------------------------------------------------
+   SmartSearch - gemeinsames Stylesheet aller Seiten.
+
+   Farbwelt: Archiv statt Cloud. Papierkuehles Weiss, Tinte als
+   Dunkelton, ein gedecktes Aktenrot als einziger Akzent. Die
+   Neutraltoene haben einen leichten Gruenstich, damit sie gewaehlt
+   wirken und nicht wie ein Standardgrau.
+
+   Aufraeumen 09/2026: Regeln fuer Bausteine, die es nicht mehr gibt
+   (Kartengitter, Haekchenlisten, das alte nachgebaute Suchfenster im
+   Auftakt), sind entfernt. Sie machten rund ein Drittel der Datei aus
+   und eine davon - .zeile - griff versehentlich in die Vorfuehrung
+   hinein und gab den Fortschrittszeilen dort Innenabstand und eine
+   Einblendung, die niemand vorgesehen hatte.
+   --------------------------------------------------------------- */
+
+:root {
+  /* Schriftrollen als Token. Vorher stand jeder Stapel an einem
+     Dutzend Stellen ausgeschrieben, und .hinweis-karte griff auf ein
+     --mono zu, das nie definiert war. */
+  --sans:  'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --serif: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+  --mono:  'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --papier:      #f7f7f6;
+  --flaeche:     #ffffff;
+  --flaeche-alt: #eeeeec;
+  --tinte:       #14181f;
+  --text:        #2c3340;
+  --gedaempft:   #61697a;
+  --linie:       #dddcd7;
+  --akzent:      #c1361f;
+  --akzent-hell: #d4472e;
+  --akzent-weich:#f7e7e3;
+  --auswahl:     #f3ded9;
+  --schatten:    0 1px 2px rgba(20,24,31,.05), 0 8px 24px rgba(20,24,31,.07);
+  --schatten-gross: 0 2px 4px rgba(20,24,31,.04), 0 24px 60px rgba(20,24,31,.13);
+
+  /* Ein Ausschwingen fuer alles, was sich bewegt - statt ease-in-out,
+     das an beiden Enden gleich traege ist und darum maschinell wirkt. */
+  --schwung: cubic-bezier(.22,.9,.3,1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papier:      #14161a;
+    --flaeche:     #1c1f25;
+    --flaeche-alt: #23272e;
+    --tinte:       #f2f3f5;
+    --text:        #d2d6dd;
+    --gedaempft:   #98a0ac;
+    --linie:       #2d323a;
+    --akzent:      #e8674c;
+    --akzent-hell: #f18a72;
+    --akzent-weich:#2e1d18;
+    --auswahl:     #46281f;
+    --schatten:    0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.4);
+    --schatten-gross: 0 2px 6px rgba(0,0,0,.35), 0 24px 60px rgba(0,0,0,.55);
+  }
+}
+:root[data-theme="dark"] {
+  --papier:      #14161a;
+  --flaeche:     #1c1f25;
+  --flaeche-alt: #23272e;
+  --tinte:       #f2f3f5;
+  --text:        #d2d6dd;
+  --gedaempft:   #98a0ac;
+  --linie:       #2d323a;
+  --akzent:      #e8674c;
+  --akzent-hell: #f18a72;
+  --akzent-weich:#2e1d18;
+  --auswahl:     #46281f;
+  --schatten:    0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.4);
+  --schatten-gross: 0 2px 6px rgba(0,0,0,.35), 0 24px 60px rgba(0,0,0,.55);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--papier);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- Was der Browser selbst zeichnet ----------
+   Textauswahl, Schreibmarke, Bildlaufleiste und der Abstand der
+   Unterstreichung kommen sonst in Systemblau daher - der einzige
+   Farbton auf der Seite, der zu nichts gehoert. */
+::selection { background: var(--auswahl); color: var(--tinte); }
+:root { accent-color: var(--akzent); caret-color: var(--akzent); }
+@supports (scrollbar-color: auto) {
+  html { scrollbar-color: var(--linie) transparent; }
+}
+a { text-underline-offset: .18em; text-decoration-thickness: from-font; }
+
+/* ---------- Deutscher Satz ----------
+   Deutsch hat lange Woerter: "Nutzungsbedingungen", "Texterkennung",
+   "Multifunktionssystem". Ohne Trennung reisst der rechte Rand auf, und
+   ein zerklueftetes Satzbild ist das Erkennungsmerkmal schnell gebauter
+   Seiten. Die Trennmuster bringt der Browser mit, weil im html-Element
+   lang="de" steht - es braucht keine Bibliothek.
+
+   hyphenate-limit-chars: nur Woerter ab 8 Zeichen trennen und nie
+   weniger als 4 Zeichen allein stehen lassen. Sonst entstehen Reste
+   wie "Da-tei", die schlechter aussehen als der offene Rand. */
+.vorspann, .einleitung, .fliess, .umfang dd, .fragen .antwort,
+.hinweis-karte > p, .schritte-gross li, .beruhigung, .am-telefon > p,
+.schaustueck figcaption, .fuss p, .ki-hinweis, .schritt p,
+.rechtstext p, .rechtstext li, .danke p {
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  hyphenate-limit-chars: 8 4 4;
+  /* Verhindert, dass die letzte Zeile aus einem einzelnen Wort besteht. */
+  text-wrap: pretty;
+}
+/* Ueberschriften und Daten werden nicht getrennt: dort zaehlt die
+   geschlossene Form, und Pfade oder Belegnummern duerfen nie brechen. */
+h1, h2, h3, .marke, .adresse, .beleg-zeile, code, .dialog { hyphens: manual; }
+
+/* Haengende Interpunktion: das oeffnende Anfuehrungszeichen sitzt auf
+   der Satzkante statt den Text um seine Breite einzuruecken. Safari
+   setzt das um - und die Besucher dieser Seite sind Mac-Nutzer. */
+.fliess, .fragen .antwort, .umfang dd, .schaustueck figcaption, .danke p {
+  hanging-punctuation: first;
+}
+
+.bahn { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+
+/* Sprungziele nicht unter die klebende Kopfzeile schieben. Vorher
+   verschwand die Ueberschrift dahinter, wenn man oben auf "Umfang"
+   klickte. */
+:target, section[id], main [id] { scroll-margin-top: 84px; }
+
+/* Sprungmarke fuer Tastaturbedienung - erste Station beim Tabben. */
+.springen {
+  position: absolute; left: -9999px;
+  background: var(--akzent); color: #fff;
+  padding: 12px 20px; border-radius: 0 0 8px 0; z-index: 100;
+  text-decoration: none; font-weight: 600;
+}
+.springen:focus { left: 0; top: 0; }
+
+a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--akzent); outline-offset: 3px; border-radius: 3px;
+}
+
+/* ---------- Kopfzeile ---------- */
+header {
+  border-bottom: 1px solid var(--linie);
+  position: sticky; top: 0; z-index: 10;
+  background: var(--papier);
+}
+@supports (backdrop-filter: blur(12px)) {
+  header { background: color-mix(in srgb, var(--papier) 86%, transparent);
+           backdrop-filter: saturate(180%) blur(12px); }
+}
+.kopf { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+.marke {
+  font-family: var(--serif);
+  font-weight: 600; font-size: 18px; color: var(--tinte);
+  letter-spacing: -.01em; text-decoration: none;
+}
+.marke span { color: var(--akzent); }
+.kopf nav { display: flex; gap: 26px; align-items: center; }
+.kopf nav a { font-size: 14px; color: var(--gedaempft); text-decoration: none;
+  transition: color .15s var(--schwung); }
+.kopf nav a:hover { color: var(--tinte); }
+
+/* Sprachumschalter. Abgesetzt vom Rest der Navigation, weil er kein
+   Sprungziel auf der Seite ist, sondern die Seite wechselt. */
+.kopf nav a.sprache {
+  padding-left: 26px; margin-left: -4px;
+  border-left: 1px solid var(--linie);
+  font-variant-caps: all-small-caps; letter-spacing: .04em;
+}
+@media (max-width: 720px) {
+  .kopf nav { gap: 18px; }
+  .kopf nav a { font-size: 13px; }
+}
+@media (max-width: 560px) {
+  /* Auf schmalen Bildschirmen reichte der Platz nicht: die Navigation
+     ueberlappte den Markennamen und lief rechts aus dem Bild. Dort bleibt
+     nur der Verweis zum Herunterladen stehen - der einzige, den man auf
+     dem Telefon wirklich braucht. Die uebrigen Ziele sind ohnehin
+     Sprungmarken auf derselben Seite. */
+  .kopf nav a { display: none; }
+  .kopf nav a[href$="#laden"], .kopf nav a[href="index.html#laden"] {
+    display: inline; font-weight: 500; color: var(--akzent);
+  }
+  .bahn { padding: 0 20px; }
+}
+
+/* ---------- Typografie ----------
+   Drei Stufen, jede mit eigener Aufgabe: Seitentitel, Abschnitt,
+   Baustein. Die zweite Stufe stand vorher fest auf 27 px, waehrend die
+   erste bis 55 px mitwuchs - auf breiten Bildschirmen riss das
+   auseinander und die Abschnitte wirkten wie Beschriftungen. */
+h1 {
+  font-family: var(--serif);
+  font-size: clamp(32px, 5.2vw, 54px);
+  line-height: 1.08; font-weight: 600; color: var(--tinte);
+  letter-spacing: -.022em; text-wrap: balance; margin-bottom: 22px;
+}
+h1 em { font-style: normal; color: var(--akzent); }
+h2 {
+  font-family: var(--serif);
+  font-size: clamp(25px, 2.7vw, 34px);
+  line-height: 1.18; font-weight: 600; color: var(--tinte);
+  letter-spacing: -.018em; margin-bottom: 16px; text-wrap: balance;
+}
+h3 { font-size: 16px; font-weight: 600; color: var(--tinte); }
+
+.vorspann {
+  font-size: clamp(17px, 1.5vw, 19.5px); line-height: 1.6;
+  color: var(--gedaempft); max-width: 34em; margin-bottom: 34px;
+}
+.einleitung { color: var(--gedaempft); max-width: 36em; margin-bottom: 40px; }
+
+/* ---------- Auftakt ----------
+   Vorher stand hier Text ueber der halben Seitenbreite und rechts
+   daneben nichts; das Programm selbst war erst nach dem ersten
+   Scrollen zu sehen. Jetzt traegt das Bildschirmfoto den Auftakt: die
+   Anfrage "Rechnung ueber den Drucker" und drei Treffer, in deren
+   Dateinamen keines dieser Woerter vorkommt. Das ist der ganze
+   Gedanke der Anwendung in einem Bild - es lag bis jetzt ungenutzt im
+   Ordner. */
+.auftakt { padding: 74px 0 0; }
+@media (max-width: 640px) { .auftakt { padding: 52px 0 0; } }
+
+.schaustueck { margin: 0; padding: 54px 0 76px; }
+.schaustueck picture { display: block; }
+.schaustueck img {
+  width: 100%; height: auto; display: block;
+  border-radius: 12px;
+  box-shadow: var(--schatten-gross);
+}
+.schaustueck figcaption {
+  margin-top: 18px; font-size: 13.5px; line-height: 1.6;
+  color: var(--gedaempft); max-width: 46em;
+}
+@media (max-width: 640px) {
+  .schaustueck { padding: 34px 0 52px; }
+  .schaustueck img { border-radius: 8px; }
+}
+
+/* ---------- Laden ---------- */
+.laden { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 36px; }
+/* Ohne diese Zeile setzt sich das display:flex oben gegen das
+   hidden-Attribut durch, und der Ladeknopf bliebe am Telefon stehen. */
+.laden[hidden] { display: none; }
+.knopf {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: var(--akzent); color: #fff; font-size: 15.5px; font-weight: 600;
+  padding: 14px 26px; border-radius: 8px; text-decoration: none;
+  transition: background .2s var(--schwung), transform .2s var(--schwung),
+              box-shadow .2s var(--schwung);
+}
+.knopf:hover { background: var(--akzent-hell); box-shadow: 0 6px 18px rgba(193,54,31,.22); }
+.knopf:active { transform: translateY(1px); box-shadow: none; }
+.knopf svg { width: 17px; height: 17px; flex: none; }
+.dabei { font-size: 13.5px; color: var(--gedaempft); line-height: 1.5; }
+.dabei b { color: var(--text); font-weight: 500; }
+
+/* ---------- Kleine Beschriftung auf Bausteinen ----------
+   Eine Definition statt vorher zwei, die sich in Laufweite und
+   Schriftrolle widersprachen. */
+.marke-klein {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11.5px; font-weight: 500;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--akzent); margin-bottom: 12px;
+}
+
+/* ---------- Hinweis fuer Besucher am Telefon ---------- */
+.am-telefon {
+  margin-top: 44px; padding: 26px 24px 24px;
+  background: var(--flaeche); border: 1px solid var(--linie);
+  border-radius: 12px; box-shadow: var(--schatten);
+}
+.am-telefon h3 {
+  font-family: var(--serif);
+  font-size: 20px; line-height: 1.32; color: var(--tinte);
+  margin-bottom: 12px; font-weight: 600;
+}
+.am-telefon > p { font-size: 16px; line-height: 1.7; margin-bottom: 18px; }
+.am-telefon .adresse {
+  font-family: var(--mono);
+  font-size: 18px; font-weight: 500; color: var(--tinte);
+  margin-bottom: 22px;
+}
+.telefon-knoepfe { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.knopf-leise {
+  font: inherit; font-size: 15px; font-weight: 500;
+  background: var(--flaeche-alt); color: var(--text);
+  border: 1px solid var(--linie); border-radius: 8px;
+  padding: 13px 20px; cursor: pointer;
+  transition: background .2s var(--schwung), border-color .2s var(--schwung);
+}
+.knopf-leise:hover { background: var(--papier); border-color: var(--gedaempft); }
+.am-telefon .trotzdem { margin: 18px 0 0; font-size: 13.5px; }
+.am-telefon .trotzdem a { color: var(--gedaempft); }
+
+/* ---------- Abschnitte ---------- */
+section { padding: 78px 0; border-top: 1px solid var(--linie); }
+@media (max-width: 640px) { section { padding: 54px 0; } }
+.schutz { background: var(--flaeche); }
+
+/* ---------- Fragen und Antworten ---------- */
+.fragen { max-width: 720px; }
+.fragen details { border-bottom: 1px solid var(--linie); padding: 4px 0; }
+.fragen summary {
+  font-size: 15.5px; font-weight: 500; color: var(--tinte);
+  padding: 16px 30px 16px 0; cursor: pointer; list-style: none;
+  position: relative; transition: color .15s var(--schwung);
+}
+.fragen summary::-webkit-details-marker { display: none; }
+.fragen summary::after {
+  content: ""; position: absolute; right: 6px; top: 50%;
+  width: 8px; height: 8px; margin-top: -6px;
+  border-right: 1.5px solid var(--gedaempft); border-bottom: 1.5px solid var(--gedaempft);
+  transform: rotate(45deg); transition: transform .25s var(--schwung);
+}
+.fragen details[open] summary::after { transform: rotate(-135deg); margin-top: -2px; }
+.fragen summary:hover { color: var(--akzent); }
+.fragen summary:hover::after { border-color: var(--akzent); }
+.fragen .antwort { font-size: 14.5px; color: var(--gedaempft); padding: 0 0 18px; max-width: 620px; }
+.fragen .antwort p + p { margin-top: 10px; }
+.fragen .antwort a { color: var(--akzent); }
+
+/* ---------- Rechtstexte ---------- */
+.rechtstext { padding: 56px 0 80px; max-width: 720px; }
+.rechtstext h1 { font-size: clamp(28px, 3.4vw, 36px); margin-bottom: 8px; }
+.rechtstext .stand { font-size: 13px; color: var(--gedaempft);
+  font-family: var(--mono); margin-bottom: 40px; }
+.rechtstext h2 { font-size: 20px; margin: 38px 0 12px; letter-spacing: -.01em; }
+.rechtstext h3 { font-size: 16px; margin: 24px 0 8px; }
+.rechtstext p { font-size: 15.5px; color: var(--text); margin-bottom: 14px; }
+.rechtstext ul, .rechtstext ol { margin: 0 0 16px 22px; font-size: 15.5px; color: var(--text); }
+.rechtstext li { padding: 3px 0; }
+.rechtstext a { color: var(--akzent); }
+.rechtstext strong { color: var(--tinte); }
+
+/* ---------- Wer das baut ----------
+   Bei Software, die Vertraege, Rechnungen und Ausweiskopien liest, ist
+   "wer ist das eigentlich" die entscheidende Frage. Der Satz dazu stand
+   vorher klein und grau im Fussbereich. */
+.person { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 34px; align-items: start; }
+.person picture { display: block; }
+.person img {
+  width: 148px; height: 148px; display: block;
+  object-fit: cover; border-radius: 12px;
+  background: var(--flaeche-alt);
+  box-shadow: var(--schatten);
+}
+.person .worte { max-width: 40em; }
+.person .worte a { color: var(--akzent); }
+.person .worte p { font-size: 16.5px; line-height: 1.72; margin-bottom: 18px; }
+.person .worte p:last-child { margin-bottom: 0; }
+.person .worte strong { color: var(--tinte); font-weight: 600; }
+.person .name {
+  font-family: var(--serif); font-size: 19px; font-weight: 600;
+  color: var(--tinte); margin-bottom: 4px; letter-spacing: -.012em;
+}
+.person .rolle { font-size: 13.5px; color: var(--gedaempft); margin-bottom: 18px; }
+@media (max-width: 640px) {
+  .person { grid-template-columns: 1fr; gap: 22px; }
+  .person img { width: 116px; height: 116px; }
+}
+
+/* ---------- Versionsverlauf ---------- */
+.verlauf { padding: 56px 0 80px; max-width: 720px; }
+.verlauf h1 { font-size: clamp(28px, 3.4vw, 36px); margin-bottom: 8px; }
+.verlauf > p.stand { font-size: 13px; color: var(--gedaempft);
+  font-family: var(--mono); margin-bottom: 44px; }
+.fassung { border-top: 1px solid var(--linie); padding: 26px 0 4px; }
+.fassung:last-of-type { border-bottom: 1px solid var(--linie); margin-bottom: 34px; }
+.fassung .kopfzeile {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.fassung .nummer {
+  font-family: var(--mono); font-size: 17px; font-weight: 500;
+  color: var(--tinte); font-variant-numeric: tabular-nums;
+}
+.fassung .datum { font-size: 13px; color: var(--gedaempft); font-family: var(--mono); }
+.fassung ul { list-style: none; margin: 0; }
+.fassung li {
+  font-size: 15.5px; line-height: 1.66; color: var(--text);
+  padding: 0 0 8px 20px; position: relative;
+}
+.fassung li::before {
+  content: ""; position: absolute; left: 2px; top: .68em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--linie);
+}
+.fassung li:last-child { padding-bottom: 0; }
+
+/* Deutlich sichtbare Markierung fuer alles, was noch einzusetzen ist.
+   Sie soll auffallen: was hier steht, darf nicht versehentlich online
+   gehen. */
+.platzhalter {
+  font-family: var(--mono); font-size: 13px;
+  color: #7a5a12; background: #fbf3dc; padding: 1px 7px; border-radius: 3px;
+  border: 1px dashed #cbb066;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .platzhalter {
+    color: #ddc07a; background: #2a2417; border-color: #5f5330;
+  }
+}
+:root[data-theme="dark"] .platzhalter {
+  color: #ddc07a; background: #2a2417; border-color: #5f5330;
+}
+
+/* ---------------------------------------------------------------
+   Danke-Seite
+   ---------------------------------------------------------------
+   Der Klick auf "Laden" liess den Besucher vorher allein: die Datei
+   kam, und die Anleitung fuer die macOS-Meldung stand irgendwo weiter
+   unten auf der Startseite. Wer sie nicht fand, sah als Erstes
+   "SmartSearch kann nicht geoeffnet werden" - und war weg.
+
+   Diese Seite hat genau eine Aufgabe: den Download anstossen und
+   waehrenddessen die drei Schritte zeigen, die danach kommen. Sie ist
+   auf noindex gesetzt, weil sie ohne den Klick davor keinen Sinn hat.
+   --------------------------------------------------------------- */
+.danke { padding: 68px 0 90px; max-width: 700px; }
+.danke h1 { font-size: clamp(28px, 3.6vw, 40px); margin-bottom: 14px; }
+.danke > p { font-size: 16.5px; line-height: 1.72; margin-bottom: 20px; }
+
+.laeuft {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--linie); border-bottom: 1px solid var(--linie);
+  padding: 20px 0; margin: 28px 0 40px;
+}
+.laeuft .balken {
+  flex: none; width: 84px; height: 4px; border-radius: 2px;
+  background: var(--flaeche-alt); overflow: hidden; align-self: center;
+}
+.laeuft .balken i {
+  display: block; height: 100%; width: 40%; border-radius: 2px;
+  background: var(--akzent);
+  animation: laufen 1.4s var(--schwung) infinite;
+}
+@keyframes laufen {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.laeuft .was { font-size: 15.5px; color: var(--tinte); font-weight: 500; }
+.laeuft .falls { font-size: 13.5px; color: var(--gedaempft); }
+.laeuft .falls a { color: var(--akzent); }
+@media (prefers-reduced-motion: reduce) {
+  .laeuft .balken i { animation: none; width: 100%; }
+}
+
+.danke .zwischen {
+  font-family: var(--serif); font-size: 21px; font-weight: 600;
+  color: var(--tinte); margin: 0 0 14px; letter-spacing: -.012em;
+}
+.danke .weiter {
+  margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--linie);
+  font-size: 14.5px; color: var(--gedaempft);
+}
+.danke .weiter a { color: var(--akzent); }
+
+/* ---------- Fehlerseite ---------- */
+.fehlerseite { padding: 120px 0; text-align: center; }
+.fehlerseite .zahl {
+  font-family: var(--mono);
+  font-size: 72px; font-weight: 500; color: var(--akzent); line-height: 1;
+  margin-bottom: 20px; font-variant-numeric: tabular-nums;
+}
+.fehlerseite p { color: var(--gedaempft); max-width: 420px; margin: 0 auto 32px; }
+.fehlerseite .laden { justify-content: center; }
+
+/* ---------- Fuss ---------- */
+footer { border-top: 1px solid var(--linie); padding: 44px 0 60px; }
+.fuss { display: flex; flex-wrap: wrap; gap: 30px; justify-content: space-between; }
+.fuss p { font-size: 13px; color: var(--gedaempft); max-width: 380px; }
+.fuss nav { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+.fuss nav a { font-size: 13px; color: var(--gedaempft); text-decoration: none; }
+.fuss nav a:hover { color: var(--tinte); text-decoration: underline; }
+/* Hinweis auf das TikTok-Konto. Bewusst nur ein Verweis, kein eingebettetes
+   Widget: ein Widget von TikTok wuerde Skripte nachladen, Cookies setzen und
+   die IP der Besucher uebertragen - und damit ein Einwilligungsbanner noetig
+   machen. Das Zeichen liegt als SVG im Text und nimmt die Textfarbe an, es
+   funktioniert deshalb in heller und dunkler Darstellung ohne Zutun. */
+.fuss .werkstatt { display: block; margin-top: 12px; }
+.fuss .tiktok {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--gedaempft); text-decoration: none;
+}
+.fuss .tiktok:hover { color: var(--tinte); text-decoration: underline; }
+.fuss .tiktok svg { width: 13px; height: 13px; flex: none; }
+
+/* Fussnote zur KI-Nutzung - bewusst unauffaellig, es ist eine
+   Angabe, keine Warnung. */
+.ki-hinweis {
+  margin-top: 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--gedaempft);
+  max-width: 62ch;
+}
+
+/* Nur auf der englischen Fassung: erklaert, warum Impressum,
+   Datenschutz und Nutzungsbedingungen deutsch bleiben. Steht bewusst
+   unter den Verweisen, nicht daneben - es ist eine Fussnote. */
+.fuss .rechts-hinweis {
+  flex-basis: 100%;
+  margin-top: 18px; padding-top: 16px;
+  border-top: 1px solid var(--linie);
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--gedaempft); max-width: 62ch;
+}
+.fuss .rechts-hinweis a { color: var(--gedaempft); }
+.fuss .rechts-hinweis a:hover { color: var(--tinte); }
+
+/* ---------- Fliesstext statt Kacheln ----------
+   Textspalte in Lesebreite, aber am selben linken Raster wie die
+   uebrigen Abschnitte. Ein einfaches max-width auf dem Container haette
+   den ganzen Block mittig gesetzt - die Kante waere gegenueber den
+   anderen Ueberschriften eingerueckt gewesen. */
+.bahn.spalte { max-width: 1040px; }
+.bahn.spalte > * { max-width: 40em; }
+.fliess { font-size: 16.5px; line-height: 1.72; color: var(--text); margin-bottom: 20px; }
+.fliess strong { color: var(--tinte); font-weight: 600; }
+/* Pfade sind ein Wort ohne Trennstelle. Ohne die Umbruchregel schob
+   ~/Library/Application Support/SmartSearch/ die ganze Seite auf dem
+   Telefon 38 Pixel nach rechts hinaus - man konnte quer scrollen. */
+.fliess code, .fragen code, .rechtstext code, .person code {
+  font-family: var(--mono); font-size: .88em;
+  background: var(--flaeche-alt); padding: 1px 5px; border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.einschraenkung {
+  border-left: 1px solid var(--linie); padding-left: 20px;
+  font-size: 15.5px; color: var(--gedaempft); margin-top: 28px;
+}
+
+/* Gegenueberstellung von Eingabe und Dokumentinhalt. Die Mono-Schrift
+   steht hier fuer echte Belegdaten - Nummern, Betraege, Modellnamen -
+   nicht als Kostuem fuer "technisch". */
+.beleg {
+  border-top: 1px solid var(--linie); border-bottom: 1px solid var(--linie);
+  padding: 22px 0; margin: 30px 0;
+}
+.beleg-zeile {
+  display: grid; grid-template-columns: 150px 1fr; gap: 16px;
+  font-family: var(--mono);
+  font-size: 14px; color: var(--tinte); padding: 5px 0;
+  font-variant-numeric: tabular-nums;
+}
+.beleg-zeile span {
+  font-family: var(--sans); font-size: 12px; font-variant-numeric: normal;
+  text-transform: uppercase; letter-spacing: .07em; color: var(--gedaempft);
+  padding-top: 2px;
+}
+@media (max-width: 560px) {
+  .beleg-zeile { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* ---------- Umfang als Definitionsliste ---------- */
+.umfang { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 48px; }
+@media (max-width: 780px) { .umfang { grid-template-columns: 1fr; gap: 28px; } }
+.umfang dt {
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 600; color: var(--tinte);
+  margin-bottom: 8px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--linie);
+}
+.umfang dd { font-size: 14.5px; line-height: 1.64; color: var(--gedaempft); }
+
+/* ---------------------------------------------------------------
+   Gatekeeper-Hinweis
+   ---------------------------------------------------------------
+   Die Meldung "SmartSearch kann nicht geoeffnet werden" ist die
+   Stelle, an der die meisten Leute abspringen - sie sieht aus wie
+   ein Virenfund, ist aber nur die fehlende Apple-Beglaubigung.
+   Deshalb bekommt sie hier eine eigene Karte mit Nachbau des
+   Dialogs: Wer die Meldung vorher gesehen hat, erschrickt nicht.
+
+   Der drei Pixel breite rote Rand links ist weg. Er markierte die
+   Karte als Warnung, obwohl sie beruhigen soll - und ein farbiger
+   Balken an der Kante ist genau das Muster, das jede Hinweisbox im
+   Netz benutzt. Die kleine Beschriftung oben reicht.
+   --------------------------------------------------------------- */
+
+.hinweis-karte {
+  margin-top: 44px;
+  background: var(--flaeche);
+  border: 1px solid var(--linie);
+  border-radius: 12px;
+  padding: 32px 34px 34px;
+  box-shadow: var(--schatten);
+}
+@media (max-width: 620px) { .hinweis-karte { padding: 24px 20px 26px; } }
+
+.hinweis-karte h3 {
+  font-family: var(--serif);
+  font-size: 21px;
+  line-height: 1.3;
+  color: var(--tinte);
+  margin-bottom: 14px;
+  text-wrap: balance;
+}
+.hinweis-karte > p { font-size: 16px; line-height: 1.7; margin-bottom: 18px; }
+.hinweis-karte > p:last-child { margin-bottom: 0; }
+
+/* Nachbau des macOS-Dialogs - bewusst schlicht, es geht ums
+   Wiedererkennen, nicht um eine originalgetreue Kopie. */
+.dialog {
+  max-width: 340px;
+  margin: 24px auto 28px;
+  background: var(--flaeche-alt);
+  border: 1px solid var(--linie);
+  border-radius: 11px;
+  padding: 22px 20px 16px;
+  text-align: center;
+  box-shadow: var(--schatten);
+}
+.dialog .zeichen {
+  /* Vorher mit line-height zentriert - das sass durch den 2px-Rand
+     einen Pixel zu hoch. Flex zentriert unabhaengig von der Schrift. */
+  width: 38px; height: 38px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  border: 2px solid var(--gedaempft);
+  color: var(--gedaempft);
+  font-size: 21px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.dialog .titel {
+  font-size: 14px; font-weight: 600; color: var(--tinte);
+  line-height: 1.4; margin-bottom: 6px;
+}
+.dialog .text { font-size: 12.5px; color: var(--gedaempft); line-height: 1.5; margin-bottom: 16px; }
+.dialog .knopfleiste { display: flex; gap: 8px; }
+.dialog .knopfleiste span {
+  flex: 1; font-size: 12.5px; padding: 5px 0; border-radius: 5px;
+  border: 1px solid var(--linie); color: var(--text); background: var(--flaeche);
+}
+.dialog .knopfleiste .haupt {
+  background: var(--gedaempft); border-color: var(--gedaempft); color: var(--flaeche);
+}
+
+/* Schritte mit gesetzter Nummer - hebt die Anleitung vom Fliesstext ab.
+   Die Nummern bleiben, weil hier die Reihenfolge die Information ist:
+   erst die Meldung schliessen, dann die Einstellungen oeffnen. */
+.schritte-gross { list-style: none; margin: 4px 0 22px; counter-reset: schritt; }
+.schritte-gross li {
+  counter-increment: schritt;
+  position: relative;
+  padding: 0 0 16px 42px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.schritte-gross li:last-child { padding-bottom: 0; }
+.schritte-gross li::before {
+  content: counter(schritt);
+  position: absolute; left: 0; top: -1px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--akzent); color: #fff;
+  font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.schritte-gross b { color: var(--tinte); font-weight: 600; }
+
+.beruhigung {
+  margin-top: 22px; padding-top: 18px;
+  border-top: 1px solid var(--linie);
+  font-size: 15px; line-height: 1.65; color: var(--gedaempft);
+}
+.beruhigung b { color: var(--text); font-weight: 500; }
+
+/* ---------- Wer weniger Bewegung wuenscht ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { scroll-behavior: auto !important; }
+  .knopf, .knopf-leise, .kopf nav a,
+  .fragen summary, .fragen summary::after { transition: none; }
+}

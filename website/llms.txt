@@ -1,0 +1,44 @@
+# SmartSearch
+
+> Eine Anwendung für macOS, die Dokumente auf dem eigenen Rechner nach
+> Inhalt durchsucht statt nach Dateinamen. Sie arbeitet vollständig lokal:
+> Dateien werden weder übertragen noch ausgewertet, es gibt kein Konto.
+> Die Anwendung ist kostenlos.
+
+## Was sie tut
+
+SmartSearch liest Dokumente einmalig ein und berechnet für jeden Abschnitt,
+worum es inhaltlich geht. Bei einer Suchanfrage wird dieselbe Rechnung auf die
+eingegebene Beschreibung angewandt und verglichen, welche Abschnitte am besten
+dazu passen. Ergänzend läuft eine klassische Stichwortsuche mit, damit Namen,
+Nummern und exakte Begriffe zuverlässig treffen.
+
+Gelesen werden PDF, Word, Excel, PowerPoint sowie Text- und Markdown-Dateien.
+Eingescannte PDF-Dateien werden über die in macOS enthaltene Texterkennung
+erschlossen.
+
+## Grenzen
+
+Die Suche versteht Sprache, nicht Produktwelten. Steht auf einem Dokument
+ausschließlich eine Modellnummer und sonst nichts, was mit dem gesuchten
+Begriff zu tun hat, wird es nicht gefunden.
+
+## Voraussetzungen
+
+macOS 12 oder neuer, Apple Silicon oder Intel. Der Download umfasst 293 MB;
+beim ersten Start kommen etwa 2,3 GB für das Suchmodell hinzu. Danach wird
+keine Internetverbindung mehr benötigt.
+
+Die Anwendung ist nicht von Apple beglaubigt und muss beim ersten Start
+einmalig über die Systemeinstellungen freigegeben werden.
+
+## Seiten
+
+- [Startseite](/): Beschreibung, Funktionsumfang, Herunterladen
+- [Datenschutzerklärung](/datenschutz.html): Umgang mit Daten auf Website und in der Anwendung
+- [Nutzungsbedingungen](/nutzungsbedingungen.html): Lizenz, Gewährleistung, Haftung
+- [Impressum](/impressum.html): Anbieterkennzeichnung
+
+## Kontakt
+
+Einzelprojekt aus Bielefeld, Deutschland.

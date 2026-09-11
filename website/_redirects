@@ -1,0 +1,34 @@
+# Weiterleitungen für Cloudflare Pages
+#
+# Der Downloadknopf zeigt auf /SmartSearch.dmg - also auf die eigene
+# Adresse. Von dort geht es unsichtbar weiter zur Datei im neuesten
+# GitHub-Release.
+#
+# Warum der Umweg: Die DMG ist rund 300 MB gross, und Cloudflare Pages
+# nimmt einzelne Dateien nur bis 25 MB. Sie kann hier also nicht liegen.
+# Ohne diese Weiterleitung muesste der Knopf direkt nach GitHub zeigen -
+# und dort landet jemand ohne IT-Hintergrund auf einer fremden
+# Entwicklerseite voller Quellcode und Commit-Nummern und ist sich nicht
+# mehr sicher, ob er richtig ist. So sieht er nur smartsearch-app.com,
+# und der Download startet sofort.
+#
+# "latest" loest GitHub selbst auf: Ausgeliefert wird immer die Datei aus
+# dem neuesten Release, ohne dass hier etwas geaendert werden muss.
+# Voraussetzung ist, dass sie dort immer SmartSearch.dmg heisst - dafuer
+# sorgt build.sh.
+#
+# 302 statt 301: Eine dauerhafte Weiterleitung wuerde sich in den Browsern
+# der Besucher festsetzen. Liegt die Datei spaeter woanders, waere das bei
+# allen, die schon einmal geladen haben, nicht mehr zu korrigieren.
+
+/SmartSearch.dmg   https://github.com/Marcel-land/SmartSearch/releases/latest/download/SmartSearch.dmg   302
+
+# Naheliegende Schreibweisen, falls jemand sie raet oder verlinkt.
+/download          https://github.com/Marcel-land/SmartSearch/releases/latest/download/SmartSearch.dmg   302
+/herunterladen     https://github.com/Marcel-land/SmartSearch/releases/latest/download/SmartSearch.dmg   302
+
+# Kurzlink fuer Videobeschreibungen. Die Markierung ?ref=tiktok taucht in
+# der Statistik als eigener Pfad auf - so ist zu sehen, was tatsaechlich
+# von dort kommt. Der eingebaute Browser von TikTok gibt die Herkunft
+# sonst nicht weiter.
+/tiktok            /?ref=tiktok            302

@@ -27,11 +27,14 @@ import subprocess
 import re
 import threading
 import math
+import urllib.request
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 INDEX_FILE = os.path.join(os.path.dirname(__file__), "index.pkl")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 FAVORITEN_FILE = os.path.join(os.path.dirname(__file__), "favoriten.json")
+LIZENZ_FILE = os.path.join(os.path.dirname(__file__), "lizenz.json")
 
 UNTERSTUETZT = (".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx")
 
@@ -145,6 +148,104 @@ def favorit_umschalten(pfad):
         ist_favorit = True
     speichere_favoriten(favoriten)
     return ist_favorit
+
+
+# ---------- ABO (Grundgerüst fürs geplante Abomodell) ----------
+#
+# Modell (nach Rücksprache mit Marcel): Die Basis-Version ist dauerhaft
+# kostenlos, KEIN Trial. Ein aktives Abo schaltet nur die Pro-Funktionen
+# frei (OCR, Office-Formate). Verifiziert wird über die hinterlegte
+# E-Mail-Adresse, die App fragt periodisch beim (künftigen) Zahlungs-
+# anbieter den aktuellen Abo-Status ab - erkennt so auch, wenn ein Abo
+# gekündigt/abgelaufen ist, statt einmal freigeschaltet für immer zu
+# gelten.
+#
+# WICHTIG: ABO_STATUS_URL ist noch ein Platzhalter (siehe Konstante).
+# Zahlungsanbieter (Paddle/Lemon Squeezy/Stripe/...) steht laut Marcel noch
+# nicht fest - sobald er sich entschieden hat, muss abo_status_online_pruefen()
+# den echten API-Endpunkt des Anbieters ansprechen (typischerweise: E-Mail
+# oder Kunden-ID rein, aktueller Abo-Status raus). Bis dahin schlägt die
+# Online-Prüfung immer fehl (kein Absturz, Pro bleibt einfach inaktiv).
+
+ABO_STATUS_URL = "https://example.com/smartsearch/abo-status"
+
+# Wie lange ein zuletzt erfolgreich als "aktiv" geprüfter Abo-Status auch
+# OHNE Internetverbindung weiter gilt (Offline-Kulanz) - sonst würde jeder
+# kurze Internetausfall zahlende Nutzer sofort auf die Basis-Version
+# zurückwerfen.
+ABO_OFFLINE_KULANZ_TAGE = 3
+
+
+def lade_abo():
+    """Lädt den lokal zwischengespeicherten Abo-Status."""
+    if os.path.exists(LIZENZ_FILE):
+        try:
+            with open(LIZENZ_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[Warnung] Abo-Datei konnte nicht gelesen werden: {e}")
+    return {"email": None, "aktiv": False, "zuletzt_geprueft": None}
+
+
+def speichere_abo(abo):
+    try:
+        with open(LIZENZ_FILE, "w") as f:
+            json.dump(abo, f, indent=2)
+    except Exception as e:
+        print(f"[Warnung] Abo-Status konnte nicht gespeichert werden: {e}")
+
+
+def abo_email_setzen(email):
+    """Hinterlegt die Konto-E-Mail lokal (noch ohne Prüfung - dafür
+    abo_status_online_pruefen() separat aufrufen, üblicherweise im
+    Hintergrund-Thread der GUI, da das ein Netzwerk-Request ist)."""
+    abo = lade_abo()
+    abo["email"] = (email or "").strip()
+    speichere_abo(abo)
+
+
+def abo_status_online_pruefen():
+    """Fragt beim Zahlungsanbieter den aktuellen Abo-Status für die
+    hinterlegte E-Mail ab und cached das Ergebnis lokal mit Zeitstempel.
+
+    Gibt (erfolgreich, aktiv, fehlermeldung) zurück:
+    - erfolgreich=False -> Anfrage ist fehlgeschlagen (kein Internet, Server
+      noch nicht eingerichtet, ...); 'aktiv' ist dann der zuletzt bekannte
+      gecachte Stand, NICHT neu geprüft.
+    - erfolgreich=True -> 'aktiv' ist der frisch vom Server bestätigte Stand.
+    """
+    abo = lade_abo()
+    email = abo.get("email")
+    if not email:
+        return False, False, "Keine E-Mail-Adresse hinterlegt."
+
+    try:
+        url = f"{ABO_STATUS_URL}?email={urllib.parse.quote(email)}"
+        with urllib.request.urlopen(url, timeout=8) as antwort:
+            daten = json.loads(antwort.read().decode("utf-8"))
+        aktiv = bool(daten.get("aktiv", False))
+        abo["aktiv"] = aktiv
+        abo["zuletzt_geprueft"] = time.time()
+        speichere_abo(abo)
+        return True, aktiv, None
+    except Exception as e:
+        return False, abo.get("aktiv", False), str(e)
+
+
+def ist_pro_aktiv():
+    """Schneller LOKALER Check ohne Netzwerk (für den UI-Start) - nutzt den
+    zuletzt geprüften Status, solange er nicht älter als
+    ABO_OFFLINE_KULANZ_TAGE ist. Danach gilt Pro als inaktiv, bis eine neue
+    Online-Prüfung wieder 'aktiv' bestätigt (siehe
+    abo_status_online_pruefen)."""
+    abo = lade_abo()
+    if not abo.get("aktiv"):
+        return False
+    zuletzt = abo.get("zuletzt_geprueft")
+    if not zuletzt:
+        return False
+    tage_her = (time.time() - zuletzt) / 86400
+    return tage_her <= ABO_OFFLINE_KULANZ_TAGE
 
 
 def lade_modell():

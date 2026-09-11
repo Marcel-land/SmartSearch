@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['../app_icon.icns'],
+    icon=['icon.icns'],
 )
 coll = COLLECT(
     exe,
@@ -46,6 +46,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='SmartSearch.app',
-    icon='../app_icon.icns',
+    icon='icon.icns',
     bundle_identifier=None,
 )

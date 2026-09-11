@@ -28,10 +28,12 @@ from tkinter import filedialog, messagebox
 import threading
 import json
 import os
-import subprocess
 import sys
 import time
 import re
+import webbrowser
+import urllib.request
+import urllib.error
 
 try:
     from watchdog.observers import Observer
@@ -40,24 +42,87 @@ try:
 except ImportError:
     WATCHDOG_VERFUEGBAR = False
 
-import objc
-from AppKit import (
-    NSStatusBar,
-    NSVariableStatusItemLength,
-    NSObject,
-    NSApp,
-    NSApplicationActivationPolicyRegular,
-)
+# BETRIEBSSYSTEM-ABHAENGIGE TEILE
+# -------------------------------
+# Alles, was je nach System anders funktioniert (Benachrichtigung,
+# Vorschau, "im Dateimanager zeigen", Autostart), liegt in plattform.py.
+# Alles, was es nur auf dem Mac gibt (Menueleisten-Symbol, globaler
+# Tastenkurzbefehl, Dock-Symbol), liegt in menueleiste_mac.py und wird
+# NUR auf dem Mac importiert. Frueher stand das alles hier oben als
+# harter "from AppKit import ..." - damit liess sich diese Datei auf
+# Windows nicht einmal starten.
+import plattform
+
+if plattform.IST_MAC:
+    import menueleiste_mac as system_ui
+elif plattform.IST_WINDOWS:
+    import menueleiste_windows as system_ui
+else:
+    system_ui = None
+
+# Beide Module melden ueber VERFUEGBAR, ob ihre Grundlage wirklich da ist
+# (PyObjC auf dem Mac, pystray unter Windows). Fehlt sie, wird system_ui
+# bewusst auf None gesetzt: dann gibt es kein Symbol zum Zurueckholen des
+# Fensters, und die Oberflaeche darf es nicht mehr automatisch verstecken
+# (siehe auf_fokus_verlust) - sonst waere die App unbedienbar.
+if system_ui is not None and not getattr(system_ui, "VERFUEGBAR", False):
+    print("[Start] Kein Symbol in Menueleiste/Infobereich - Fenster bleibt sichtbar.")
+    system_ui = None
 
 import search as smart_search
+import ocr
+import i18n
+from i18n import t
+import farben
 
 ctk.set_appearance_mode("System")
+# "blue" laedt das vollstaendige Standardthema - farben.thema_anwenden
+# ersetzt danach nur die Farbwerte durch die Markenfarben. Das muss vor
+# dem ersten Widget passieren, weil CustomTkinter die Werte beim
+# Erzeugen liest.
 ctk.set_default_color_theme("blue")
+farben.thema_anwenden(ctk)
 
-VERLAUF_DATEI = os.path.join(os.path.dirname(__file__), "verlauf.json")
+# Siehe pfade.py: liegt in ~/Library/Application Support/SmartSearch,
+# damit ein App-Update den Suchverlauf nicht mitloescht.
+from pfade import VERLAUF_FILE as VERLAUF_DATEI, DATEN_ORDNER  # noqa: F401
 MAX_VERLAUF = 20
-PLATZHALTER_TEXT = "🔍 Wonach suchst du? (z.B. Rechnung, Vertrag...)"
+PLATZHALTER_TEXT = t("search.placeholder")
 UNTERSTUETZTE_ENDUNGEN = {".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md"}
+
+# Fensterbreiten: OHNE Sidebar ist FENSTER_BREITE_ZU die volle Breite für
+# den Hauptbereich (Suchfeld, Filter, Ergebnisse). Die Sidebar (220px +
+# 8px Abstand) kommt bei geöffneter Seitenleiste ON TOP dazu, statt sich
+# den Platz mit dem Hauptbereich zu teilen - so schrumpft der Hauptbereich
+# beim Öffnen der Sidebar nicht zusammen.
+# Bewusst kompakt: SmartSearch ist ein Quick-Popup zum kurzen Nachschauen
+# (auf/finden/zu), kein Programmfenster, in dem man sich länger aufhält -
+# vorher war es mit 780x480 spürbar zu groß und "breit und lang" dafür.
+FENSTER_BREITE_ZU = 640
+FENSTER_BREITE_OFFEN = FENSTER_BREITE_ZU + 220 + 8
+FENSTER_HOEHE = 440
+
+# ---------- VERSION & AUTO-UPDATE ----------
+# Bei jedem Release von Hand hochzählen (siehe pruefe_auf_updates()).
+APP_VERSION = "1.0.1"
+
+# Anschrift fuer Rueckmeldungen. Vor der Veroeffentlichung durch die
+# eigene Adresse ersetzen - am besten eine, die zur Domain gehoert.
+RUECKMELDUNG_ADRESSE = "kontakt@smartsearch-app.com"
+
+# TODO (Marcel): Diese URL muss noch auf eine echte, von dir gehostete
+# JSON-Datei zeigen (z.B. über GitHub Pages/Releases oder deine eigene
+# Website) mit dem Format:
+#   {"version": "1.1.0", "download_url": "https://.../SmartSearch.dmg",
+#    "notes": "Kurzer Änderungstext"}
+# Bis dahin ist die Update-Prüfung ein funktionierendes Gerüst, das nur
+# ins Leere läuft (schlägt still fehl, siehe pruefe_auf_updates) - kein
+# waschechtes Sparkle-Auto-Update mit Download+Neustart, das würde ein
+# eigenes Framework + signierte Releases + einen Appcast-Feed brauchen.
+# Für den Anfang reicht dieser einfache "Hinweis + Link zum Download"-
+# Mechanismus völlig aus.
+UPDATE_CHECK_URL = "https://smartsearch-app.com/version.json"
+UPDATE_CHECK_TIMEOUT_SEK = 5
 
 DATEITYP_GRUPPEN = {
     "PDF": {".pdf"},
@@ -67,35 +132,22 @@ DATEITYP_GRUPPEN = {
     "Text": {".txt", ".md"},
 }
 
-BADGE_FARBEN = {
-    ".pdf": ("#e53935", "#ffffff"),
-    ".docx": ("#1e88e5", "#ffffff"),
-    ".xlsx": ("#43a047", "#ffffff"),
-    ".pptx": ("#fb8c00", "#ffffff"),
-    ".txt": ("#757575", "#ffffff"),
-    ".md": ("#8e24aa", "#ffffff"),
-}
+# Die Toene stehen in farben.py, zusammen mit den geprueften
+# Kontrastwerten gegen die weisse Schrift.
+BADGE_FARBEN = farben.BADGE_FARBEN
 
 
-def send_macos_notification(title, message):
-    """Zeigt eine native macOS-Notification. Escaped Anführungszeichen/Backslashes,
-    damit Datei- oder Suchbegriffe das AppleScript nicht brechen können."""
-    try:
-        def escape(text):
-            return text.replace("\\", "\\\\").replace('"', '\\"')
+def _version_tuple(v):
+    """Wandelt einen Versionsstring wie '1.2.10' in (1, 2, 10) um, damit
+    Versionen NUMERISCH statt als Text verglichen werden - ein reiner
+    Textvergleich würde z.B. '1.9.0' fälschlich für neuer als '1.10.0'
+    halten."""
+    teile = []
+    for stueck in v.strip().split("."):
+        ziffern = re.match(r"\d+", stueck)
+        teile.append(int(ziffern.group()) if ziffern else 0)
+    return tuple(teile)
 
-        script = f'display notification "{escape(message)}" with title "{escape(title)}"'
-        subprocess.run(["osascript", "-e", script], check=False)
-    except Exception as e:
-        print(f"[Notifikation Fehler] {e}")
-
-
-def quicklook_vorschau(dateipfad):
-    if dateipfad and os.path.exists(dateipfad):
-        try:
-            subprocess.Popen(["qlmanage", "-p", dateipfad], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception as e:
-            print(f"[QuickLook Fehler] {e}")
 
 
 
@@ -162,10 +214,15 @@ class SmartSearchNotchWindow(ctk.CTk):
         super().__init__()
 
         self.toggle_requested = False
+        # Wird vom Menue des Symbols in der Menueleiste bzw. im
+        # Infobereich gesetzt. Beide laufen in einem fremden Thread und
+        # duerfen deshalb nur ein Flag setzen - abgefragt wird es im
+        # Tk-Hauptthread, siehe check_toggle_loop().
+        self.beenden_requested = False
 
         self.title("SmartSearch")
         self.attributes("-topmost", True)
-        self.geometry("780x480")
+        self.geometry(f"{FENSTER_BREITE_ZU}x{FENSTER_HOEHE}")
 
         # -topmost wird IMMER nur reaktiviert, wenn SmartSearch selbst
         # wieder den Fokus bekommt (Klick zurück ins Fenster) - nie mehr
@@ -195,53 +252,96 @@ class SmartSearchNotchWindow(ctk.CTk):
         # Schutz gegen parallele Indexierungs-Läufe (manuell + Watchdog)
         self.indexierung_lock = threading.Lock()
         self.indexierung_laeuft = False
+        self.aktuelle_such_woerter = []
         self.indexierung_abbrechen = False
 
         self._sperrbare_buttons = []
 
+        # Zustand, der beim Sprachwechsel (siehe wende_sprache_live_an())
+        # NICHT zurückgesetzt werden darf - deshalb hier einmalig statt in
+        # _baue_oberflaeche(), das bei jedem Sprachwechsel erneut läuft.
+        self.einstellungen_fenster = None
+        self.aktueller_theme_modus = "System"
+        self.autostart_var = ctk.BooleanVar(value=self.ist_autostart_aktiv())
+
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # Hauptcontainer (Clean Mac Look)
+        # Hauptcontainer (Clean Mac Look) - bleibt über die gesamte
+        # Lebensdauer des Fensters bestehen. Nur sein INHALT
+        # (sidebar_frame/main_frame) wird bei einem Sprachwechsel neu
+        # aufgebaut, siehe _baue_oberflaeche() / wende_sprache_live_an().
         self.bg_frame = ctk.CTkFrame(self, corner_radius=14, border_width=1)
         self.bg_frame.pack(fill="both", expand=True, padx=2, pady=2)
         self.bg_frame.grid_columnconfigure(1, weight=1)
         self.bg_frame.grid_rowconfigure(0, weight=1)
 
+        self._baue_oberflaeche()
+        self._nach_oberflaechenaufbau_starten()
+
+    def _baue_oberflaeche(self):
+        """Baut Seitenleiste + Hauptbereich (Suchfeld, Filter, Ergebnisse,
+        Statusleiste) innerhalb von self.bg_frame auf.
+
+        Ausgelagert aus __init__(), damit wende_sprache_live_an() nach
+        einem Sprachwechsel exakt dieselbe Oberfläche mit den neuen Texten
+        neu erzeugen kann, ohne echten Zustand (Fenstergröße, Theme,
+        Autostart-Einstellung, Preferences-Fenster-Referenz) zu verlieren -
+        der liegt bewusst NICHT hier, sondern einmalig in __init__.
+        """
         # ================= SEITENLEISTE =================
+        # Bewusst schlank gehalten: nur die Aktionen, die man beim Suchen
+        # wirklich oft braucht. Alles Seltene (Erscheinungsbild, Autostart,
+        # Backup, Datenschutz) sitzt im separaten Preferences-Fenster (siehe
+        # oeffne_einstellungen_fenster()) - dadurch muss man hier nie mehr
+        # scrollen, um z.B. an den Datenschutz-Hinweis zu kommen, und es
+        # gibt Platz für künftige Einstellungen.
         self.sidebar_frame = ctk.CTkFrame(self.bg_frame, width=220, corner_radius=12)
 
-        self.sidebar_title = ctk.CTkLabel(self.sidebar_frame, text="⚙️ Einstellungen", font=("Helvetica", 14, "bold"))
-        self.sidebar_title.pack(padx=15, pady=(15, 8), anchor="w")
+        self.sidebar_title = ctk.CTkLabel(self.sidebar_frame, text=t("sidebar.title"), font=("Helvetica", 14, "bold"))
+        self.sidebar_title.pack(padx=15, pady=(12, 6), anchor="w")
 
-        # LIGHT / DARK MODE SWITCH
-        self.theme_label = ctk.CTkLabel(self.sidebar_frame, text="Erscheinungsbild", font=("Helvetica", 10), text_color="#78909c")
-        self.theme_label.pack(padx=15, pady=(4, 2), anchor="w")
+        # Erscheinungsbild: bewusst wieder hier im Schnellzugriff (statt nur
+        # im Preferences-Fenster) - wird oft genug gewechselt, dass ein
+        # zusätzlicher Klick ins Einstellungsfenster unnötig nervt.
+        self.theme_label = ctk.CTkLabel(self.sidebar_frame, text=t("sidebar.appearance"), font=("Helvetica", 10), text_color="#78909c")
+        self.theme_label.pack(padx=15, pady=(3, 2), anchor="w")
 
         self.theme_seg = ctk.CTkSegmentedButton(
-            self.sidebar_frame, values=["System", "Light", "Dark"], command=self.theme_wechseln, font=("Helvetica", 10)
+            self.sidebar_frame,
+            values=[t("sidebar.theme_system"), t("sidebar.theme_light"), t("sidebar.theme_dark")],
+            command=self.theme_wechseln, font=("Helvetica", 10)
         )
-        self.theme_seg.set("System")
-        self.theme_seg.pack(padx=12, pady=(0, 12), fill="x")
+        self.theme_seg.set(t("sidebar.theme_system"))
+        self.theme_seg.pack(padx=12, pady=(0, 8), fill="x")
 
-        # MENÜ BUTTONS (Clean Styling)
+        # Beenden-Button: fest am unteren Rand verankert, damit er nie durch
+        # zusätzliche Einträge (z.B. den Fehler-Button) verdeckt wird. Der
+        # größere Abstand nach unten (16px) ist bewusst so belassen - sonst
+        # wird der Button optisch von der abgerundeten Fensterecke
+        # "verschluckt" (siehe frühere Anpassung).
+        self.quit_button = ctk.CTkButton(
+            self.sidebar_frame, text=t("sidebar.quit"), fg_color=farben.BEENDEN, hover_color=farben.BEENDEN_HOVER, anchor="w", command=self.beenden
+        )
+        self.quit_button.pack(padx=12, pady=(8, 16), fill="x", side="bottom")
+
         self.btn_favs_anzeigen = ctk.CTkButton(
-            self.sidebar_frame, text="⭐ Favoriten", fg_color="#37474f", hover_color="#263238", anchor="w", command=self.favoriten_anzeigen
+            self.sidebar_frame, text=t("sidebar.favorites"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.favoriten_anzeigen
         )
         self.btn_favs_anzeigen.pack(padx=12, pady=3, fill="x")
 
         self.add_folder_button = ctk.CTkButton(
-            self.sidebar_frame, text="📁 Ordner hinzufügen", fg_color="#37474f", hover_color="#263238", anchor="w", command=self.ordner_hinzufuegen_gui
+            self.sidebar_frame, text=t("sidebar.add_folder"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.ordner_hinzufuegen_gui
         )
         self.add_folder_button.pack(padx=12, pady=3, fill="x")
 
         self.manage_button = ctk.CTkButton(
-            self.sidebar_frame, text="📂 Ordner verwalten", fg_color="#37474f", hover_color="#263238", anchor="w", command=self.ordner_verwalten_gui
+            self.sidebar_frame, text=t("sidebar.manage_folders"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.ordner_verwalten_gui
         )
         self.manage_button.pack(padx=12, pady=3, fill="x")
 
         self.index_button = ctk.CTkButton(
-            self.sidebar_frame, text="🔄 Index aktualisieren", fg_color="#1f77b4", hover_color="#1565c0", anchor="w", command=self.index_aktualisieren
+            self.sidebar_frame, text=t("sidebar.update_index"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.index_aktualisieren
         )
         self.index_button.pack(padx=12, pady=3, fill="x")
 
@@ -251,48 +351,20 @@ class SmartSearchNotchWindow(ctk.CTk):
         # _index_fertig() ein- oder ausgeblendet, je nachdem ob es
         # fehlgeschlagene Dateien gibt. Vorher landeten solche Fehler nur
         # im Terminal und wurden im Alltag (z.B. bei Autostart im
-        # Hintergrund) nie bemerkt.
+        # Hintergrund) nie bemerkt. Bleibt bewusst im Schnellzugriff (statt
+        # im Preferences-Fenster), weil es eine zeitnah wichtige Meldung
+        # ist - siehe pack(after=self.index_button) in
+        # aktualisiere_fehler_anzeige().
         self.btn_fehler_anzeigen = ctk.CTkButton(
-            self.sidebar_frame, text="⚠️ 0 Dateien nicht lesbar", fg_color="#e65100", hover_color="#bf360c",
+            self.sidebar_frame, text=t("sidebar.errors_button", anzahl=0), fg_color="#e65100", hover_color="#bf360c",
             anchor="w", command=self.fehlgeschlagene_dateien_dialog
         )
 
-        # Export/Import der Einrichtung (überwachte Ordner + Favoriten) als
-        # JSON-Datei - praktisch als Backup oder zum Übertragen auf einen
-        # anderen Mac, ohne den kompletten (oft großen) Suchindex
-        # mitnehmen zu müssen.
-        self.export_button = ctk.CTkButton(
-            self.sidebar_frame, text="⬇️ Einstellungen exportieren", fg_color="#37474f", hover_color="#263238",
-            anchor="w", command=self.einstellungen_exportieren
+        self.einstellungen_button = ctk.CTkButton(
+            self.sidebar_frame, text=t("sidebar.settings"), fg_color="transparent", hover_color=("#e0e0e0", "#3a3a3a"),
+            text_color=("#37474f", "#b0bec5"), anchor="w", command=self.oeffne_einstellungen_fenster
         )
-        self.export_button.pack(padx=12, pady=(8, 3), fill="x")
-
-        self.import_button = ctk.CTkButton(
-            self.sidebar_frame, text="⬆️ Einstellungen importieren", fg_color="#37474f", hover_color="#263238",
-            anchor="w", command=self.einstellungen_importieren
-        )
-        self.import_button.pack(padx=12, pady=3, fill="x")
-
-        self.autostart_var = ctk.BooleanVar(value=self.ist_autostart_aktiv())
-        self.autostart_cb = ctk.CTkCheckBox(
-            self.sidebar_frame, text="Mit Mac starten", variable=self.autostart_var, font=("Helvetica", 11), command=self.autostart_umschalten
-        )
-        self.autostart_cb.pack(padx=12, pady=10, anchor="w")
-
-        # Datenschutz-Erklärung direkt in der App - macht sichtbar, was
-        # sonst nur auf einer externen Landingpage stehen würde: dass
-        # alles lokal verarbeitet wird. Wichtig gerade weil Nutzer hier
-        # sensible Dokumente (Ausweise, Rechnungen, Verträge) indexieren.
-        self.datenschutz_button = ctk.CTkButton(
-            self.sidebar_frame, text="🔒 Datenschutz", fg_color="transparent", hover_color=("#e0e0e0", "#3a3a3a"),
-            text_color=("#37474f", "#b0bec5"), anchor="w", command=self.zeige_datenschutz_dialog
-        )
-        self.datenschutz_button.pack(padx=12, pady=(0, 4), anchor="w")
-
-        self.quit_button = ctk.CTkButton(
-            self.sidebar_frame, text="✕ Beenden", fg_color="#c62828", hover_color="#b71c1c", anchor="w", command=self.beenden
-        )
-        self.quit_button.pack(padx=12, pady=(10, 8), fill="x", side="bottom")
+        self.einstellungen_button.pack(padx=12, pady=(6, 4), anchor="w")
 
         # ================= HAUPTBEREICH =================
         self.main_frame = ctk.CTkFrame(self.bg_frame, fg_color="transparent")
@@ -316,7 +388,7 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.suchfeld.grid(row=0, column=1, padx=4, pady=4, sticky="ew")
         self.suchfeld.bind("<Return>", lambda event: self.suchen())
 
-        self.such_button = ctk.CTkButton(self.top_frame, text="Suchen", width=75, height=34, font=("Helvetica", 11, "bold"), command=self.suchen)
+        self.such_button = ctk.CTkButton(self.top_frame, text=t("search.button"), width=75, height=34, font=("Helvetica", 11, "bold"), command=self.suchen)
         self.such_button.grid(row=0, column=2, padx=(4, 6), pady=4)
 
         # ZWEI getrennte Button-Gruppen: Ordner-/Index-bezogene Buttons
@@ -353,12 +425,23 @@ class SmartSearchNotchWindow(ctk.CTk):
             cb.pack(side="left", padx=3, pady=1)
             self.filter_variablen[label] = var
 
+        # ZEITRAUM_CODES: Anzeige-Text (übersetzt) -> sprachunabhängiger Code,
+        # den search.py._zeitraum_cutoff() versteht. Nötig, weil sich der
+        # angezeigte Menütext je nach Sprache ändert (z.B. "7 Tage" vs.
+        # "7 Days") - ein Vergleich gegen den angezeigten Text würde in der
+        # jeweils anderen Sprache nie mehr treffen.
+        self.zeitraum_anzeige_zu_code = {
+            t("filter.all_time"): "alle",
+            t("filter.7_days"): "7_tage",
+            t("filter.this_month"): "monat",
+            t("filter.this_year"): "jahr",
+        }
         self.zeitraum_menu = ctk.CTkOptionMenu(
-            self.filter_frame, values=["Alle Zeiten", "7 Tage", "Dieser Monat", "Dieses Jahr"],
+            self.filter_frame, values=list(self.zeitraum_anzeige_zu_code.keys()),
             width=100, height=22, font=("Helvetica", 10), command=lambda e: self.suchen()
         )
         self.zeitraum_menu.pack(side="right", padx=2, pady=1)
-        self.zeitraum_menu.set("Alle Zeiten")
+        self.zeitraum_menu.set(t("filter.all_time"))
 
         # --- ERGEBNISSE ---
         self.ergebnis_container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -370,31 +453,145 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.cards_scrollframe.grid(row=0, column=0, sticky="nsew")
         self.cards_scrollframe.grid_columnconfigure(0, weight=1)
 
-        self.aktivierte_touchpad_scrolling(self.cards_scrollframe)
+        # Touchpad-/Mausrad-Scrolling global aktivieren - deckt jetzt BEIDE
+        # scrollbaren Bereiche ab (Ergebnisliste UND die neue scrollbare
+        # Seitenleiste), siehe aktiviere_touchpad_scrolling_global().
+        self.aktiviere_touchpad_scrolling_global()
 
         self.lbl_welcome = ctk.CTkLabel(
             self.cards_scrollframe,
-            text="✨ Bereit für deine Suche.\n\nTippe oben deinen Begriff ein.",
+            text=t("welcome.text"),
             font=("Helvetica", 12), text_color="#78909c"
         )
         self.lbl_welcome.pack(pady=40)
 
         # PROZENT & STATUSLEISTE
+        # Leise Bitte um Rueckmeldung. Sie liegt zwischen Ergebnissen und
+        # Statuszeile und ist beim Start nicht eingeblendet - erst nach
+        # einigen erfolgreichen Suchen, also wenn jemand das Programm
+        # tatsaechlich benutzt. Grund: der Rueckmeldeknopf in den
+        # Einstellungen wird faktisch nie gefunden, und ohne Konto und ohne
+        # Nutzungsdaten gibt es sonst keinen Weg, von den Nutzern zu hoeren.
+        self.rueckmeldung_leiste = ctk.CTkFrame(
+            self.main_frame, corner_radius=8,
+            fg_color=("#eceff1", "#263238"))
+        self.rueckmeldung_leiste.grid_columnconfigure(0, weight=1)
+        self._rueckmeldung_sichtbar = False
+
+        ctk.CTkLabel(
+            self.rueckmeldung_leiste, text=t("feedback.bar_text"),
+            font=("Helvetica", 11), text_color=("#455a64", "#b0bec5"),
+            anchor="w", justify="left", wraplength=380
+        ).grid(row=0, column=0, sticky="w", padx=(12, 8), pady=10)
+
+        ctk.CTkButton(
+            self.rueckmeldung_leiste, text=t("feedback.bar_button"),
+            width=150, height=26, font=("Helvetica", 11),
+            fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            command=self._rueckmeldung_schreiben
+        ).grid(row=0, column=1, padx=(0, 6), pady=10)
+
+        ctk.CTkButton(
+            self.rueckmeldung_leiste, text=t("feedback.bar_later"),
+            width=86, height=26, font=("Helvetica", 11),
+            fg_color="transparent", hover_color=("#cfd8dc", "#37474f"),
+            text_color=("#607d8b", "#90a4ae"),
+            command=self._rueckmeldung_spaeter
+        ).grid(row=0, column=2, padx=(0, 10), pady=10)
+
         self.status_container = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.status_container.grid(row=3, column=0, sticky="ew", padx=2)
+        self.status_container.grid(row=4, column=0, sticky="ew", padx=2)
         self.status_container.grid_columnconfigure(0, weight=1)
 
-        self.status_bar = ctk.CTkLabel(self.status_container, text="Bereit.", anchor="w", font=("Helvetica", 10), text_color="#78909c")
+        self.status_bar = ctk.CTkLabel(self.status_container, text=t("status.ready"), anchor="w", font=("Helvetica", 10), text_color="#78909c")
         self.status_bar.grid(row=0, column=0, sticky="w")
 
         self.progress_bar = ctk.CTkProgressBar(self.status_container, width=160, height=8, corner_radius=4)
         self.progress_bar.set(0)
 
         self.btn_index_abbrechen = ctk.CTkButton(
-            self.status_container, text="Abbrechen", width=70, height=20, font=("Helvetica", 9),
-            fg_color="#c62828", hover_color="#b71c1c", command=self.index_abbrechen
+            self.status_container, text=t("cancel"), width=70, height=20, font=("Helvetica", 9),
+            fg_color=farben.WARNUNG, hover_color=farben.WARNUNG_HOVER, command=self.index_abbrechen
         )
 
+    # ---------- SPRACHWECHSEL OHNE NEUSTART ----------
+
+    def wende_sprache_live_an(self, code):
+        """Wechselt die Sprache SOFORT, ohne die App neu starten zu
+        müssen: speichert die Auswahl dauerhaft (i18n.setze_sprache) UND
+        setzt die aktive Modul-Sprache direkt um (i18n.SPRACHE), dann wird
+        die komplette Seitenleiste + Hauptbereich mit den neuen Texten neu
+        aufgebaut (siehe _baue_oberflaeche()).
+
+        UI-Zustand (Sidebar offen/zu, Theme, Suchtext, aktive Filter,
+        Zeitraum-Auswahl, aktuelle Trefferliste, ob das Preferences-Fenster
+        gerade offen war) wird vorher gesichert und danach wieder-
+        hergestellt, damit sich der Wechsel nicht wie ein harter Reset
+        anfühlt."""
+        if code == i18n.aktuelle_sprache():
+            return
+
+        # --- Zustand sichern ---
+        war_sidebar_offen = self.sidebar_offen
+        such_text = self.suchfeld.get()
+        aktive_filter_labels = {label for label, var in self.filter_variablen.items() if var.get()}
+        zeitraum_code = self.zeitraum_anzeige_zu_code.get(self.zeitraum_menu.get(), "alle")
+        einstellungen_war_offen = (
+            self.einstellungen_fenster is not None and self.einstellungen_fenster.winfo_exists()
+        )
+
+        # --- Sprache umschalten ---
+        i18n.setze_sprache(code)
+        i18n.SPRACHE = code
+
+        # Preferences-Fenster hängt NICHT an bg_frame und würde sonst mit
+        # alten Texten (Tab-Namen etc.) stehen bleiben - vor dem Neuaufbau
+        # schließen, danach ggf. frisch wieder öffnen.
+        if einstellungen_war_offen:
+            self.einstellungen_fenster.destroy()
+            self.einstellungen_fenster = None
+
+        # --- Oberfläche neu aufbauen ---
+        self.sidebar_frame.destroy()
+        self.main_frame.destroy()
+        global PLATZHALTER_TEXT
+        PLATZHALTER_TEXT = t("search.placeholder")
+        self._baue_oberflaeche()
+
+        # --- Zustand wiederherstellen ---
+        if war_sidebar_offen:
+            self.sidebar_offen = False  # toggle_sidebar() erwartet den bisherigen Zustand
+            self.toggle_sidebar()
+
+        # Theme-Werte ("System"/"Light"/"Dark") sind bewusst in beiden
+        # Sprachen identisch (siehe i18n.py) - kein t()-Aufruf nötig.
+        self.theme_seg.set(self.aktueller_theme_modus)
+
+        if such_text and such_text != PLATZHALTER_TEXT:
+            self.suchfeld.insert(0, such_text)
+
+        for label, var in self.filter_variablen.items():
+            var.set(label in aktive_filter_labels)
+
+        for anzeige, code_wert in self.zeitraum_anzeige_zu_code.items():
+            if code_wert == zeitraum_code:
+                self.zeitraum_menu.set(anzeige)
+                break
+
+        self.aktualisiere_fehler_anzeige()
+        if self.aktuelle_treffer:
+            self.zeige_aktuelle_ergebnisse()
+
+        if einstellungen_war_offen:
+            self.oeffne_einstellungen_fenster()
+
+    # ---------- SIGNAL-POLLING / ERSTER START ----------
+
+    def _nach_oberflaechenaufbau_starten(self):
+        """Einmaliger Start-Kram, der NICHT bei jedem Sprachwechsel erneut
+        laufen darf (Tastaturkürzel, Cmd+Q-Handling, Ordnerüberwachung,
+        Hotkey, Update-Check, Onboarding) - wird von __init__() genau
+        einmal aufgerufen, siehe dort."""
         # KURZWAHLTASTEN
         self.bind("<Down>", self.fokus_nach_unten)
         self.bind("<Up>", self.fokus_nach_oben)
@@ -402,25 +599,72 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.bind("<Escape>", lambda e: self.withdraw())
         self.bind("<Command-k>", lambda e: self.suchfeld.focus_set())
 
+        # Cmd+Q sauber abfangen: Tk installiert auf macOS automatisch ein
+        # eigenes "Quit"-Verhalten für Cmd+Q über die ::tk::mac::Quit-
+        # Prozedur, die OHNE diese Zeile direkt den Interpreter beendet -
+        # AN beenden() vorbei. Das würde den Watchdog-Observer und
+        # laufende Indexierungs-Threads nicht sauber stoppen. Mit
+        # createcommand landet Cmd+Q stattdessen bei genau derselben
+        # Aufräum-Logik wie der "Beenden"-Button.
+        # WICHTIG: führende "::" nicht weglassen - ohne den vollqualifizierten
+        # Namen registriert Tcl einen ANDEREN Befehl, den Tks macOS-Aqua-
+        # Integration beim Cmd+Q nie aufruft (genau das war der Bug: Cmd+Q
+        # hat einfach nichts getan, statt beenden() auszulösen).
+        self.createcommand("::tk::mac::Quit", self.beenden)
+
+        # KLICK AUF DAS APP-SYMBOL (Dock, Finder, Launchpad, Spotlight)
+        # ------------------------------------------------------------
+        # SmartSearch versteckt sein Fenster, sobald es den Fokus verliert
+        # (Popup-Charakter). Wer danach das App-Symbol anklickt, erwartet -
+        # wie bei jeder anderen Mac-App - dass das Fenster wieder da ist.
+        # Ohne die folgende Zeile passierte schlicht GAR NICHTS: das
+        # Programm lief ja schon, macOS holte es nur nach vorne, und das
+        # versteckte Fenster blieb versteckt. Das Menueleisten-Symbol war
+        # damit der einzige Weg hinein - und genau das ist unbrauchbar,
+        # wenn die Menueleiste voll ist und das Lupensymbol nicht mehr
+        # sichtbar ist.
+        #
+        # ::tk::mac::ReopenApplication ruft macOS auf, wenn eine BEREITS
+        # LAUFENDE App erneut angeklickt wird. Der ganz normale Start wird
+        # weiter unten behandelt (siehe "--autostart"), damit der
+        # automatische Start bei der Anmeldung unsichtbar bleiben kann.
+        self.createcommand("::tk::mac::ReopenApplication", self.fenster_anzeigen_von_extern)
+
         self.bind("<FocusOut>", self.auf_fokus_verlust)
         self.withdraw()
 
         self.starte_ordner_überwachung()
         self.aktualisiere_fehler_anzeige()
         self.check_toggle_loop()
+        self.registriere_globalen_hotkey()
+        self.pruefe_auf_updates(manuell=False)
 
         if self.ist_erster_start:
             # Fenster aktiv zeigen (statt versteckt zu bleiben) und kurz
-            # danach den Onboarding-Dialog öffnen, damit ein neuer Nutzer
-            # nicht vor einem leeren "Bereit für deine Suche."-Fenster
-            # steht, ohne zu wissen, dass man erst einen Ordner hinzufügen
-            # muss.
+            # danach den Setup-Guide öffnen, damit ein neuer Nutzer nicht
+            # vor einem leeren "Bereit für deine Suche."-Fenster steht,
+            # ohne zu wissen, was die App überhaupt anders macht und dass
+            # erst ein Ordner eingelesen werden muss.
             self.zeige_unter_notch()
-            self.after(300, self.zeige_onboarding_dialog)
+            self.after(300, self.zeige_setup_guide)
+        elif "--autostart" not in sys.argv:
+            # Wer die App bewusst startet (Doppelklick im Finder, Dock,
+            # Launchpad), will sie auch sehen. Frueher startete SmartSearch
+            # unsichtbar und man musste erst das Lupensymbol in der
+            # Menueleiste suchen. Nur beim automatischen Start mit der
+            # Anmeldung (--autostart, siehe autostart_umschalten) bleibt
+            # das Fenster wie gewohnt im Hintergrund.
+            self.after(200, self.zeige_unter_notch)
 
     # ---------- THEME WECHSELN ----------
 
     def theme_wechseln(self, modus):
+        # Eigenen Merker statt ctk.get_appearance_mode() zu vertrauen:
+        # customtkinter löst "System" sofort in "Light"/"Dark" auf, d.h.
+        # get_appearance_mode() gibt nie "System" zurück - der Segmented-
+        # Button im Preferences-Fenster würde sonst beim erneuten Öffnen
+        # fälschlich "Light" oder "Dark" statt "System" vorauswählen.
+        self.aktueller_theme_modus = modus
         ctk.set_appearance_mode(modus)
 
     # ---------- PROZENT-FORTSCHRITT ----------
@@ -437,31 +681,99 @@ class SmartSearchNotchWindow(ctk.CTk):
 
     # ---------- TOUCHPAD SCROLLING ----------
 
-    def aktivierte_touchpad_scrolling(self, scroll_widget):
-        def _on_mousewheel(event):
-            if event.delta:
-                scroll_widget._parent_canvas.yview_scroll(int(-1 * event.delta), "units")
+    def aktiviere_touchpad_scrolling_global(self):
+        """Bindet EINMAL global das Touchpad-/Mausrad-Scrollen und leitet es
+        an das scrollbare Widget weiter, über dem sich der Mauszeiger gerade
+        befindet. Aktuell nur die Ergebnisliste - die Seitenleiste ist
+        wieder ein normales, festes Frame (siehe __init__: die Sidebar
+        wurde bewusst schlank gehalten, ein separates Preferences-Fenster
+        übernimmt jetzt die selten gebrauchten Einstellungen). Als Liste
+        statt Einzelwidget gehalten, damit spätere scrollbare Bereiche
+        (z.B. in einem Preferences-Tab) sich einfach ergänzen lassen, ohne
+        dass sich mehrere bind_all()-Aufrufe gegenseitig überschreiben.
+        """
+        scrollbare_bereiche = (self.cards_scrollframe,)
 
-        scroll_widget.bind_all("<MouseWheel>", _on_mousewheel)
+        def _on_mousewheel(event):
+            if not event.delta:
+                return
+            widget = event.widget
+            while widget is not None:
+                if widget in scrollbare_bereiche:
+                    widget._parent_canvas.yview_scroll(int(-1 * event.delta), "units")
+                    return
+                widget = getattr(widget, "master", None)
+
+        self.bind_all("<MouseWheel>", _on_mousewheel)
 
     # ---------- FENSTER / SIGNAL-POLLING ----------
 
     def check_toggle_loop(self):
+        if self.beenden_requested:
+            self.beenden_requested = False
+            self.beenden()
+            return
         if self.toggle_requested:
             self.toggle_requested = False
             self.toggle_fenster()
+        self._pruefe_zeigen_signal()
         self.after(50, self.check_toggle_loop)
+
+    def fenster_anzeigen_von_extern(self):
+        """Fenster zeigen, angestossen von ausserhalb des Tk-Hauptthreads
+        oder von macOS (Klick aufs App-Symbol). Immer ZEIGEN, nie
+        umschalten - sonst wuerde ein Klick aufs Dock-Symbol das gerade
+        sichtbare Fenster wieder zuklappen."""
+        try:
+            self.after(0, self.zeige_unter_notch)
+        except Exception:
+            pass
+
+    def _pruefe_zeigen_signal(self):
+        """Wurde SmartSearch ein zweites Mal gestartet, legt die zweite
+        Kopie diese Datei an und beendet sich sofort wieder (siehe
+        _bereits_offene_instanz_aktivieren). Diese - die laufende - Kopie
+        holt daraufhin ihr Fenster nach vorne. Ergebnis: ein Doppelklick
+        auf die App fuehrt IMMER zum sichtbaren Fenster, egal ob sie schon
+        laeuft, und nie zu einer zweiten Instanz."""
+        try:
+            if os.path.exists(ZEIGEN_SIGNAL):
+                os.remove(ZEIGEN_SIGNAL)
+                self.zeige_unter_notch()
+        except Exception:
+            pass
+
+    def registriere_globalen_hotkey(self):
+        """Cmd+Shift+F oeffnet SmartSearch von UEBERALL aus, auch wenn eine
+        andere App im Vordergrund ist - genau der "schnell aufploppen"-
+        Charakter, den ein Suchwerkzeug braucht.
+
+        Die eigentliche Registrierung ist Systemsache und steht deshalb in
+        menueleiste_mac.py. Hier wird nur festgelegt, WAS passieren soll:
+        dasselbe wie beim Klick auf das Menueleisten-Symbol - ein Flag
+        setzen, das check_toggle_loop() alle 50 ms im Tk-Hauptthread
+        abfragt. Wichtig, weil der Tastatur-Handler auf Apples Event-Loop
+        laeuft und Tkinter-Widgets von dort nicht angefasst werden duerfen.
+        """
+        if not system_ui:
+            return
+
+        def _ausloesen():
+            self.toggle_requested = True
+
+        self._hotkey_monitor = system_ui.registriere_globalen_hotkey(_ausloesen)
 
     def zeige_unter_notch(self):
         screen_width = self.winfo_screenwidth()
-        fenster_breite = 780
+        fenster_breite = FENSTER_BREITE_OFFEN if self.sidebar_offen else FENSTER_BREITE_ZU
         x = int((screen_width - fenster_breite) / 2)
         y = 38
 
-        self.geometry(f"{fenster_breite}x480+{x}+{y}")
+        self.geometry(f"{fenster_breite}x{FENSTER_HOEHE}+{x}+{y}")
         self.deiconify()
 
-        NSApp.activateIgnoringOtherApps_(True)
+        if system_ui:
+            system_ui.fenster_nach_vorne()
         self.lift()
         self.focus_force()
         self.suchfeld.focus_set()
@@ -473,6 +785,14 @@ class SmartSearchNotchWindow(ctk.CTk):
             self.zeige_unter_notch()
 
     def auf_fokus_verlust(self, event=None):
+        # Das Fenster versteckt sich, sobald man woanders hinklickt
+        # (Popup-Charakter). Das setzt aber voraus, dass es einen zweiten
+        # Weg zurueck gibt - auf dem Mac das Menueleisten-Symbol, den
+        # Kurzbefehl und das Dock-Symbol. Solange es fuer ein System noch
+        # kein solches Symbol gibt, bleibt das Fenster lieber stehen,
+        # statt zu verschwinden und unerreichbar zu sein.
+        if not system_ui:
+            return
         if self.focus_get() is None:
             self.withdraw()
 
@@ -480,12 +800,33 @@ class SmartSearchNotchWindow(ctk.CTk):
         if self.sidebar_offen:
             self.sidebar_frame.grid_forget()
             self.sidebar_offen = False
+            neue_breite = FENSTER_BREITE_ZU
         else:
             self.sidebar_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
             self.sidebar_offen = True
+            neue_breite = FENSTER_BREITE_OFFEN
+
+        # Fenster wächst/schrumpft mit der Sidebar mit (statt starr bei
+        # 780px zu bleiben) und bleibt dabei horizontal unter der Notch
+        # zentriert - so behält der Hauptbereich (Suchfeld, Filter,
+        # Ergebnisse) immer seine volle, gewohnte Breite.
+        screen_width = self.winfo_screenwidth()
+        x = int((screen_width - neue_breite) / 2)
+        y = self.winfo_y()
+        self.geometry(f"{neue_breite}x{FENSTER_HOEHE}+{x}+{y}")
 
     def beenden(self):
         self.indexierung_abbrechen = True
+        # Sperrdatei selbst aufraeumen: weiter unten steht os._exit(0), und
+        # das geht an atexit vorbei. Bliebe die Datei liegen, koennte ein
+        # spaeterer Start sie faelschlich fuer eine laufende Instanz halten
+        # und sich wortlos beenden.
+        for datei in (SPERRDATEI, ZEIGEN_SIGNAL):
+            try:
+                if os.path.exists(datei):
+                    os.remove(datei)
+            except Exception:
+                pass
         with self.observer_lock:
             if self.observer:
                 try:
@@ -541,43 +882,28 @@ class SmartSearchNotchWindow(ctk.CTk):
         if self.indexierung_laeuft or self.indexierung_lock.locked():
             # Läuft schon (z.B. durch manuellen Klick) - nicht erneut anstoßen.
             return
-        self.setze_status("Neue Datei erkannt - automatischer Index läuft...")
+        self.setze_status(t("status.autoreindex_started"))
         self.index_aktualisieren()
 
     def ist_autostart_aktiv(self):
-        plist_path = os.path.expanduser("~/Library/LaunchAgents/com.smartsearch.app.plist")
-        return os.path.exists(plist_path)
+        """Startet SmartSearch automatisch mit der Anmeldung? Wie das
+        eingetragen ist, unterscheidet sich je nach System (LaunchAgent
+        auf dem Mac, Registry-Eintrag unter Windows) - siehe
+        plattform.py."""
+        return plattform.autostart_aktiv()
 
     def autostart_umschalten(self):
-        plist_path = os.path.expanduser("~/Library/LaunchAgents/com.smartsearch.app.plist")
-        if self.autostart_var.get():
-            app_path = os.path.abspath(sys.argv[0])
-            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.smartsearch.app</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/open</string>
-        <string>{app_path}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>"""
-            try:
-                os.makedirs(os.path.dirname(plist_path), exist_ok=True)
-                with open(plist_path, "w") as f:
-                    f.write(plist_content)
-                self.setze_status("Auto-Start aktiviert!")
-            except Exception as e:
-                self.setze_status(f"Auto-Start Fehler: {e}")
+        einschalten = self.autostart_var.get()
+        ok, fehler = plattform.autostart_setzen(einschalten)
+        if not ok:
+            self.setze_status(t("status.autostart_error", fehler=fehler))
+            # Schalter zuruecksetzen, damit die Anzeige nicht etwas
+            # behauptet, was gar nicht eingerichtet wurde.
+            self.autostart_var.set(not einschalten)
+        elif einschalten:
+            self.setze_status(t("status.autostart_enabled"))
         else:
-            if os.path.exists(plist_path):
-                os.remove(plist_path)
-                self.setze_status("Auto-Start deaktiviert.")
+            self.setze_status(t("status.autostart_disabled"))
 
     # ---------- TASTATUR-NAVIGATION ----------
 
@@ -596,7 +922,7 @@ class SmartSearchNotchWindow(ctk.CTk):
     def _aktualisiere_karten_hervorhebung(self):
         for idx, (card, _) in enumerate(self.card_widgets):
             if idx == self.fokussierter_index:
-                card.configure(border_width=2, border_color="#1f77b4")
+                card.configure(border_width=2, border_color=farben.AKZENT)
             else:
                 card.configure(border_width=0)
         self._scrolle_zu_fokussierter_karte()
@@ -650,9 +976,9 @@ class SmartSearchNotchWindow(ctk.CTk):
         nach dem Dateinamen ohne Endung, was inhaltliche Ähnlichkeit gar
         nicht erkennen konnte)."""
         self.suchfeld.delete(0, "end")
-        self.suchfeld.insert(0, f"Ähnlich zu: {os.path.basename(pfad)}")
+        self.suchfeld.insert(0, t("similar.query_prefix", name=os.path.basename(pfad)))
         self._suche_button_sperren()
-        self.setze_status("Suche nach ähnlichen Dokumenten...")
+        self.setze_status(t("similar.status_searching"))
         threading.Thread(target=self._aehnliche_bg, args=(pfad,), daemon=True).start()
 
     def _aehnliche_bg(self, pfad):
@@ -660,16 +986,24 @@ class SmartSearchNotchWindow(ctk.CTk):
             treffer = smart_search.aehnliche_dateien(pfad, top_n=15)
             self.after(0, self._zeige_aehnliche_treffer, treffer)
         except Exception as e:
-            self.after(0, lambda: self._suche_fehlgeschlagen(e))
+            # e=e als Default-Argument "einfrieren": Python löscht die
+            # except-Variable automatisch am Blockende, die Lambda würde
+            # sie aber erst später (über self.after) auswerten und dann
+            # auf ein bereits verschwundenes 'e' treffen -> NameError.
+            self.after(0, lambda e=e: self._suche_fehlgeschlagen(e))
 
     def _zeige_aehnliche_treffer(self, treffer):
         self._suche_button_entsperren()
         if treffer is None:
-            self.setze_status("Für diese Datei liegt kein KI-Vektor vor (evtl. nicht lesbar).")
+            self.setze_status(t("similar.status_no_vector"))
             self.aktuelle_treffer = []
+            self.aktuelle_such_woerter = []
             self.zeige_aktuelle_ergebnisse()
             return
         self.aktuelle_treffer = treffer
+        # Bei "Ähnliche Dokumente" gibt es keine eingetippten Suchwörter -
+        # also auch nichts, was im Textausschnitt einzufärben wäre.
+        self.aktuelle_such_woerter = []
         self.zeige_aktuelle_ergebnisse()
 
     # ---------- DATEIEN ÖFFNEN OHNE DASS SIE HINTER SMARTSEARCH VERSCHWINDEN ----------
@@ -696,7 +1030,10 @@ class SmartSearchNotchWindow(ctk.CTk):
         self._datei_im_vordergrund_oeffnen(smart_search.datei_oeffnen, pfad)
 
     def quicklook_im_vordergrund(self, pfad):
-        self._datei_im_vordergrund_oeffnen(quicklook_vorschau, pfad)
+        self._datei_im_vordergrund_oeffnen(plattform.vorschau, pfad)
+
+    def im_finder_zeigen_im_vordergrund(self, pfad):
+        self._datei_im_vordergrund_oeffnen(plattform.im_dateimanager_zeigen, pfad)
 
 
 
@@ -760,6 +1097,25 @@ class SmartSearchNotchWindow(ctk.CTk):
         rest_minuten = minuten % 60
         return f"{stunden} Std {rest_minuten} Min"
 
+    def _kuerze_dateiname(self, name, max_laenge=34):
+        """Kürzt lange Dateinamen in der Mitte (statt sie einfach abzu-
+        schneiden), damit die Dateiendung sichtbar bleibt - wichtig, seit
+        das Fenster kompakter ist und pro Treffer-Karte fünf Aktions-
+        Buttons (Favorit, Öffnen, Finder, Vorschau, Ähnliche) neben dem
+        Dateinamen Platz brauchen. Ohne Kürzung würden lange Dateinamen die
+        Buttons aus der sichtbaren Karte herausdrücken."""
+        if len(name) <= max_laenge:
+            return name
+        stamm, endung = os.path.splitext(name)
+        # Genug vom Anfang UND vom Ende (inkl. Endung) zeigen, damit der
+        # Dateiname noch wiedererkennbar bleibt.
+        rest = max_laenge - len(endung) - 1  # -1 für "…"
+        vorne = rest * 2 // 3
+        hinten = rest - vorne
+        if vorne < 4 or hinten < 4:
+            return name[:max_laenge - 1] + "…"
+        return f"{stamm[:vorne]}…{stamm[-hinten:]}{endung}"
+
     def ausgeschlossene_typen(self):
         typen = set()
         for label, var in self.filter_variablen.items():
@@ -771,15 +1127,42 @@ class SmartSearchNotchWindow(ctk.CTk):
 
     def favoriten_anzeigen(self):
         if not self.favoriten:
-            self.setze_status("Keine Favoriten vorhanden.")
+            self.setze_status(t("status.no_favorites"))
             self.aktuelle_treffer = []
+            self.aktuelle_such_woerter = []
             self.zeige_aktuelle_ergebnisse()
             return
 
+        # Favoriten sind keine Suchtreffer - nichts einzufärben.
+        self.aktuelle_such_woerter = []
         eintraege = smart_search.lade_bestehenden_index()
-        fav_treffer = [(1.0, e) for e in eintraege if e["datei"] in self.favoriten]
+        # Je Datei nur den ersten Abschnitt - sonst erscheint ein Dokument
+        # so oft, wie es Abschnitte hat.
+        gesehen = set()
+        fav_treffer = []
+        for e in eintraege:
+            pfad_e = e["datei"]
+            if pfad_e in self.favoriten and pfad_e not in gesehen:
+                gesehen.add(pfad_e)
+                fav_treffer.append((1.0, e))
         self.aktuelle_treffer = fav_treffer
         self.zeige_aktuelle_ergebnisse()
+
+    def _rollen_weiterreichen(self, ereignis):
+        """Gibt ein Mausrad-Ereignis an die Trefferliste weiter, statt es im
+        Textfeld zu verarbeiten. Ohne das rollt der Ausschnitt in sich
+        selbst und die Liste bleibt stehen - oder springt."""
+        try:
+            ziel = self.cards_scrollframe._parent_canvas
+            if ereignis.num == 4:
+                ziel.yview_scroll(-2, "units")
+            elif ereignis.num == 5:
+                ziel.yview_scroll(2, "units")
+            else:
+                ziel.yview_scroll(int(-1 * (ereignis.delta / 2)), "units")
+        except Exception:
+            pass
+        return "break"
 
     def _favorit_umschalten(self, pfad):
         ist_favorit = smart_search.favorit_umschalten(pfad)
@@ -791,14 +1174,14 @@ class SmartSearchNotchWindow(ctk.CTk):
 
     def ordner_hinzufuegen_gui(self):
         self.attributes("-topmost", False)
-        ordner = filedialog.askdirectory(title="Ordner zur Überwachung auswählen", parent=self)
+        ordner = filedialog.askdirectory(title=t("folders.picker_title"), parent=self)
         self.attributes("-topmost", True)
         self.lift()
         self.focus_force()
 
         if ordner:
             smart_search.befehl_ordner_hinzufuegen(ordner)
-            self.setze_status(f"Hinzugefügt: {ordner}")
+            self.setze_status(t("folders.status_added", ordner=ordner))
             self.starte_ordner_überwachung()
             self.index_aktualisieren()
 
@@ -806,135 +1189,635 @@ class SmartSearchNotchWindow(ctk.CTk):
 
     # ---------- ONBOARDING (erster Start) ----------
 
-    def zeige_datenschutz_dialog(self):
-        """Zeigt eine kurze, klare Erklärung, was mit den Dateien passiert -
-        direkt in der App sichtbar statt nur auf einer externen
-        Landingpage. Soll Vertrauen schaffen, gerade weil Nutzer hier
-        potenziell sensible Dokumente (Ausweise, Rechnungen, Verträge)
-        indexieren lassen."""
-        self.attributes("-topmost", False)
-        top = ctk.CTkToplevel(self)
-        top.title("Datenschutz")
-        top.geometry("480x420")
-        top.attributes("-topmost", True)
-        top.grab_set()
+    def _fuelle_hilfe_tab(self, parent):
+        """Hilfe-Tab im Preferences-Fenster: laesst die Einfuehrung erneut
+        oeffnen und beantwortet die eine Frage, die erfahrungsgemaess am
+        haeufigsten kommt ("warum finde ich nichts?"). Bewusst KEIN
+        vollstaendiges Handbuch - die App soll sich selbst erklaeren, das
+        hier ist nur das Sicherheitsnetz."""
+        ctk.CTkLabel(
+            parent, text=t("help.guide_heading"), font=("Helvetica", 13, "bold")
+        ).pack(padx=4, pady=(16, 2), anchor="w")
 
-        ctk.CTkLabel(top, text="🔒 Deine Daten bleiben auf deinem Mac", font=("Helvetica", 15, "bold")).pack(
-            padx=20, pady=(20, 10), anchor="w"
+        ctk.CTkLabel(
+            parent, text=t("help.guide_text"), font=("Helvetica", 11),
+            text_color="#78909c", justify="left", wraplength=400
+        ).pack(padx=4, pady=(0, 8), anchor="w")
+
+        ctk.CTkButton(
+            parent, text=t("help.guide_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            anchor="w", command=self._guide_aus_einstellungen_oeffnen
+        ).pack(padx=4, pady=(0, 18), fill="x")
+
+        ctk.CTkLabel(
+            parent, text=t("help.trouble_heading"), font=("Helvetica", 13, "bold")
+        ).pack(padx=4, pady=(0, 2), anchor="w")
+
+        ctk.CTkLabel(
+            parent, text=t("help.trouble_text"), font=("Helvetica", 11),
+            text_color="#78909c", justify="left", wraplength=400
+        ).pack(padx=4, pady=(0, 18), anchor="w")
+
+        # Rueckmeldung: der einzige Draht zu den Nutzern, da bewusst keine
+        # Nutzungsdaten erhoben werden. Oeffnet eine vorbereitete E-Mail -
+        # mit Versions- und Systemangaben, aber ohne Dateinamen.
+        ctk.CTkLabel(
+            parent, text=t("help.feedback_heading"), font=("Helvetica", 13, "bold")
+        ).pack(padx=4, pady=(0, 2), anchor="w")
+        ctk.CTkLabel(
+            parent, text=t("help.feedback_text"), font=("Helvetica", 11),
+            text_color="#78909c", justify="left", wraplength=400
+        ).pack(padx=4, pady=(0, 8), anchor="w")
+        ctk.CTkButton(
+            parent, text=t("help.feedback_button"), fg_color=farben.SEITE_KNOPF,
+            hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.oeffne_rueckmeldung
+        ).pack(padx=4, pady=(0, 18), fill="x")
+
+        # Texterkennung sichtbar machen: frueher schlug OCR auf fremden Macs
+        # still fehl (Tesseract/poppler waren nur auf dem Entwicklungsrechner
+        # installiert). Jetzt steht hier schwarz auf weiss, ob sie laeuft.
+        ctk.CTkLabel(
+            parent, text=t("help.ocr_heading"), font=("Helvetica", 13, "bold")
+        ).pack(padx=4, pady=(0, 2), anchor="w")
+
+        engine = ocr.verfuegbare_engine()
+        engine_namen = {"vision": "Apple Vision", "tesseract": "Tesseract"}
+        if engine:
+            ocr_text = t("help.ocr_available", engine=engine_namen.get(engine, engine))
+            ocr_farbe = "#2e7d32"
+        else:
+            ocr_text = t("help.ocr_missing")
+            ocr_farbe = "#ef6c00"
+
+        ctk.CTkLabel(
+            parent, text=ocr_text, font=("Helvetica", 11),
+            text_color=ocr_farbe, justify="left", wraplength=400
+        ).pack(padx=4, pady=(0, 12), anchor="w")
+
+    def _guide_aus_einstellungen_oeffnen(self):
+        """Schliesst das Preferences-Fenster, bevor der Guide aufgeht -
+        sonst liegen zwei topmost-Fenster uebereinander und der Guide
+        (der grab_set() nutzt) wirkt eingefroren."""
+        if self.einstellungen_fenster is not None:
+            try:
+                self.einstellungen_fenster.destroy()
+            except Exception:
+                pass
+            self.einstellungen_fenster = None
+        self.after(120, lambda: self.zeige_setup_guide(mit_ordnerauswahl=False))
+
+    # ---------- Bitte um Rueckmeldung ----------
+    # Schwellen bewusst hoch und die Bitte hoechstens zweimal: wer einmal
+    # "Nicht jetzt" sagt, meint meistens "nie" - ein zweites Nachfassen nach
+    # weiteren 25 Suchen ist die Grenze des Zumutbaren.
+    RM_AB_SUCHEN = 8
+    RM_ABSTAND = 25
+    RM_MAX = 2
+
+    def _rueckmeldung_stand(self):
+        config = smart_search.lade_config()
+        stand = config.get("rueckmeldung") or {}
+        stand.setdefault("suchen", 0)
+        stand.setdefault("gezeigt", 0)
+        stand.setdefault("erledigt", False)
+        stand.setdefault("ab", self.RM_AB_SUCHEN)
+        return config, stand
+
+    def _rueckmeldung_merken(self, config, stand):
+        config["rueckmeldung"] = stand
+        try:
+            smart_search.speichere_config(config)
+        except Exception:
+            pass  # Eine nicht schreibbare Konfiguration darf keine Suche stoeren.
+
+    def _rueckmeldung_zaehlen(self):
+        """Wird nach jeder erfolgreichen Suche aufgerufen."""
+        config, stand = self._rueckmeldung_stand()
+        stand["suchen"] += 1
+        if (not stand["erledigt"] and not self._rueckmeldung_sichtbar
+                and stand["gezeigt"] < self.RM_MAX
+                and stand["suchen"] >= stand["ab"]):
+            stand["gezeigt"] += 1
+            self._rueckmeldung_sichtbar = True
+            self.rueckmeldung_leiste.grid(row=3, column=0, sticky="ew",
+                                          padx=2, pady=(8, 0))
+        self._rueckmeldung_merken(config, stand)
+
+    def _rueckmeldung_verbergen(self):
+        self._rueckmeldung_sichtbar = False
+        try:
+            self.rueckmeldung_leiste.grid_forget()
+        except Exception:
+            pass
+
+    def _rueckmeldung_schreiben(self):
+        self._rueckmeldung_verbergen()
+        self.oeffne_rueckmeldung()
+
+    def _rueckmeldung_spaeter(self):
+        config, stand = self._rueckmeldung_stand()
+        stand["ab"] = stand["suchen"] + self.RM_ABSTAND
+        self._rueckmeldung_merken(config, stand)
+        self._rueckmeldung_verbergen()
+
+    def oeffne_rueckmeldung(self, vorbelegung=""):
+        """Oeffnet eine vorbereitete E-Mail im Standard-Mailprogramm.
+
+        Bewusst dieser Weg statt eines eingebauten Formulars: es braucht
+        keinen Server, der Nutzer sieht vor dem Absenden genau, was
+        uebermittelt wird, und kann es aendern. Enthalten sind nur
+        Programm- und Systemangaben - keine Dateinamen, keine Inhalte.
+
+        vorbelegung: Fehlermeldung, die aus einem Fehlerdialog heraus
+        mitgeschickt wird. Sonst muesste der Nutzer sie abtippen.
+        """
+        import platform
+        import urllib.parse
+        import webbrowser
+
+        engine = ocr.verfuegbare_engine() or "keine"
+        rumpf = (
+            "\n\n\n"
+            "--- Bitte diese Zeilen stehen lassen ---\n"
+            + (f"Meldung: {vorbelegung}\n" if vorbelegung else "")
+            + f"SmartSearch {APP_VERSION}\n"
+            + f"macOS {platform.mac_ver()[0]} ({platform.machine()})\n"
+            + f"Python {platform.python_version()}\n"
+            + f"Texterkennung: {engine}\n"
+            + f"Sprache: {i18n.aktuelle_sprache()}\n"
         )
+        config, stand = self._rueckmeldung_stand()
+        stand["erledigt"] = True
+        self._rueckmeldung_merken(config, stand)
 
-        punkte = [
-            ("📂", "Deine Dokumente", "werden ausschließlich lokal auf diesem Mac gelesen und analysiert. Keine Datei verlässt jemals deinen Rechner."),
-            ("🧠", "Die KI-Verarbeitung", "läuft komplett offline auf deinem Mac (BGE-M3-Modell). Keine Textinhalte werden an einen Server oder eine Cloud gesendet."),
-            ("💾", "Der Suchindex", "wird als lokale Datei auf deiner Festplatte gespeichert (index.pkl) - nirgendwo sonst."),
-            ("⬇️", "Einmaliger Download", "beim ersten Start wird nur das KI-Modell selbst heruntergeladen (kein Dokumenteninhalt), danach funktioniert alles offline."),
+        adresse = RUECKMELDUNG_ADRESSE
+        link = (f"mailto:{adresse}"
+                f"?subject={urllib.parse.quote('SmartSearch ' + APP_VERSION + ' - Rueckmeldung')}"
+                f"&body={urllib.parse.quote(rumpf)}")
+        try:
+            webbrowser.open(link)
+        except Exception:
+            self.setze_status(t("help.feedback_failed", adresse=adresse))
+
+    def _fuelle_datenschutz_inhalt(self, parent):
+        """Baut den Datenschutz-Text (persönliche, direkte Sprache statt
+        trockener Stichpunktliste mit Fachbegriffen) in ein beliebiges
+        Eltern-Widget - wird vom Preferences-Fenster als eigener Tab
+        genutzt (siehe oeffne_einstellungen_fenster()). Soll ehrliches
+        Vertrauen schaffen, gerade weil hier potenziell sensible Dokumente
+        (Ausweise, Rechnungen, Verträge) indexiert werden."""
+        ctk.CTkLabel(parent, text=t("privacy.heading"), font=("Helvetica", 16, "bold")).pack(
+            padx=4, pady=(10, 4), anchor="w"
+        )
+        ctk.CTkLabel(
+            parent,
+            text=t("privacy.intro"),
+            font=("Helvetica", 11), text_color="#78909c", justify="left", wraplength=420
+        ).pack(padx=4, pady=(0, 16), anchor="w")
+
+        abschnitte = [
+            (t("privacy.section1_title"), t("privacy.section1_text")),
+            (t("privacy.section2_title"), t("privacy.section2_text")),
+            (t("privacy.section3_title"), t("privacy.section3_text")),
+            (t("privacy.section4_title"), t("privacy.section4_text")),
         ]
 
-        for icon, titel, text in punkte:
-            zeile = ctk.CTkFrame(top, fg_color="transparent")
-            zeile.pack(fill="x", padx=20, pady=6, anchor="w")
-            ctk.CTkLabel(zeile, text=icon, font=("Helvetica", 16)).pack(side="left", padx=(0, 10), anchor="n")
-            text_spalte = ctk.CTkFrame(zeile, fg_color="transparent")
-            text_spalte.pack(side="left", fill="x", expand=True)
-            ctk.CTkLabel(text_spalte, text=titel, font=("Helvetica", 12, "bold"), anchor="w", justify="left").pack(fill="x", anchor="w")
+        for titel, text in abschnitte:
+            block = ctk.CTkFrame(parent, fg_color="transparent")
+            block.pack(fill="x", padx=4, pady=7, anchor="w")
             ctk.CTkLabel(
-                text_spalte, text=text, font=("Helvetica", 10), text_color="#78909c",
-                anchor="w", justify="left", wraplength=360
+                block, text=titel, font=("Helvetica", 12, "bold"), anchor="w", justify="left", wraplength=420
             ).pack(fill="x", anchor="w")
+            ctk.CTkLabel(
+                block, text=text, font=("Helvetica", 10), text_color="#78909c",
+                anchor="w", justify="left", wraplength=420
+            ).pack(fill="x", anchor="w", pady=(1, 0))
 
-        ctk.CTkButton(top, text="Verstanden", command=top.destroy).pack(side="bottom", padx=20, pady=20)
+        ctk.CTkLabel(
+            parent,
+            text=t("privacy.closing"),
+            font=("Helvetica", 10, "italic"), text_color="#78909c", justify="left", wraplength=420
+        ).pack(padx=4, pady=(4, 10), anchor="w")
 
-    def zeige_onboarding_dialog(self):
-        """Geführter Ersteinrichtungs-Dialog beim allerersten Start: lässt
-        den Nutzer aus gängigen Standardordnern auswählen oder einen
-        eigenen Ordner hinzufügen, statt vor einem leeren Suchfenster zu
-        stehen und selbst herausfinden zu müssen, dass man erst einen
-        Ordner hinzufügen und indexieren muss."""
+    def oeffne_einstellungen_fenster(self):
+        """Separates Preferences-Fenster - sammelt die selten gebrauchten
+        Einstellungen in Reitern. Erscheinungsbild, Ordner verwalten und
+        die Fehleranzeige bleiben bewusst NUR im Schnellzugriff (keine
+        doppelten Buttons an zwei Stellen). Wird beim erneuten Aufruf nur
+        nach vorne geholt statt dupliziert, wie man es von echten
+        macOS-Apps kennt (Cmd+,)."""
+        if self.einstellungen_fenster is not None and self.einstellungen_fenster.winfo_exists():
+            self.einstellungen_fenster.deiconify()
+            self.einstellungen_fenster.lift()
+            self.einstellungen_fenster.focus_force()
+            return
+
         self.attributes("-topmost", False)
         top = ctk.CTkToplevel(self)
-        top.title("Willkommen bei SmartSearch")
+        top.title(t("settings.window_title"))
         top.geometry("480x420")
+        top.attributes("-topmost", True)
+        top.protocol("WM_DELETE_WINDOW", top.destroy)
+        self.einstellungen_fenster = top
+
+        tabview = ctk.CTkTabview(top)
+        tabview.pack(fill="both", expand=True, padx=16, pady=16)
+
+        tab_allgemein = tabview.add(t("settings.tab_general"))
+        tab_hilfe = tabview.add(t("settings.tab_help"))
+        tab_backup = tabview.add(t("settings.tab_backup"))
+        tab_datenschutz = tabview.add(t("settings.tab_privacy"))
+
+        # ---- Allgemein: Autostart + Sprache + Version/Update
+        # (Erscheinungsbild sitzt im Schnellzugriff, siehe __init__) ----
+        # autostart_var immer auf den tatsächlichen Zustand auf der
+        # Festplatte zurücksetzen, falls sich das LaunchAgent-Plist seit
+        # dem letzten Öffnen extern geändert hat.
+        self.autostart_var.set(self.ist_autostart_aktiv())
+        ctk.CTkCheckBox(
+            tab_allgemein, text=t("settings.autostart_checkbox"), variable=self.autostart_var,
+            command=self.autostart_umschalten
+        ).pack(padx=4, pady=(16, 4), anchor="w")
+
+        # Sprachumschalter: Sprachnamen bewusst NICHT übersetzt ("Deutsch"/
+        # "English" bleiben immer in sich selbst benannt) - so findet man
+        # seine Sprache auch, wenn die Oberfläche gerade in der jeweils
+        # ANDEREN Sprache angezeigt wird. Wirkt SOFORT (siehe
+        # wende_sprache_live_an() weiter oben) - kein Neustart mehr nötig.
+        ctk.CTkLabel(
+            tab_allgemein, text=t("settings.language_label"), font=("Helvetica", 10), text_color="#78909c"
+        ).pack(padx=4, pady=(16, 2), anchor="w")
+
+        sprache_werte = {"Deutsch": "de", "English": "en"}
+        sprache_umkehr = {v: k for k, v in sprache_werte.items()}
+
+        def sprache_gewaehlt(anzeige):
+            code = sprache_werte.get(anzeige)
+            if code:
+                self.wende_sprache_live_an(code)
+
+        sprache_seg = ctk.CTkSegmentedButton(
+            tab_allgemein, values=list(sprache_werte.keys()), command=sprache_gewaehlt, font=("Helvetica", 10)
+        )
+        sprache_seg.set(sprache_umkehr.get(i18n.aktuelle_sprache(), "Deutsch"))
+        sprache_seg.pack(padx=4, pady=(0, 12), fill="x")
+
+        ctk.CTkLabel(
+            tab_allgemein, text=t("settings.version_label", version=APP_VERSION), font=("Helvetica", 11), text_color="#78909c"
+        ).pack(padx=4, pady=(20, 4), anchor="w")
+        ctk.CTkButton(
+            tab_allgemein, text=t("settings.check_updates_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            anchor="w", command=lambda: self.pruefe_auf_updates(manuell=True)
+        ).pack(padx=4, pady=4, fill="x")
+
+        # ---- Hilfe ----
+        self._fuelle_hilfe_tab(tab_hilfe)
+
+        # ---- Backup: Export / Import ----
+        ctk.CTkLabel(
+            tab_backup,
+            text=t("backup.description"),
+            font=("Helvetica", 11), text_color="#78909c", justify="left"
+        ).pack(padx=4, pady=(12, 12), anchor="w")
+        ctk.CTkButton(
+            tab_backup, text=t("backup.export_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            anchor="w", command=self.einstellungen_exportieren
+        ).pack(padx=4, pady=4, fill="x")
+        ctk.CTkButton(
+            tab_backup, text=t("backup.import_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            anchor="w", command=self.einstellungen_importieren
+        ).pack(padx=4, pady=4, fill="x")
+
+        # ---- Datenschutz ----
+        datenschutz_scroll = ctk.CTkScrollableFrame(tab_datenschutz, fg_color="transparent")
+        datenschutz_scroll.pack(fill="both", expand=True)
+        self._fuelle_datenschutz_inhalt(datenschutz_scroll)
+
+    def zeige_setup_guide(self, mit_ordnerauswahl=True):
+        """Mehrstufige Einfuehrung.
+
+        Beim ersten Start (mit_ordnerauswahl=True) fuehrt sie durch fuenf
+        Schritte: Suchprinzip, Funktionsumfang, Datenschutz, Ordnerauswahl,
+        Bedienung. Erneut geoeffnet aus Einstellungen > Hilfe entfaellt der
+        Ordnerschritt, damit ein Nachschlagen nicht versehentlich Ordner
+        doppelt eintraegt oder eine vollstaendige Neuindexierung ausloest.
+
+        Zur Gestaltung: bewusst ruhig gehalten - eine Ueberschrift, eine
+        Haarlinie, Flaechentext. Keine farbigen Kaesten, keine Symbole in
+        Beschriftungen, ein einziger hervorgehobener Knopf pro Seite. Der
+        Aufbau lehnt sich an die Systemassistenten von macOS an, damit die
+        Einfuehrung wie ein Teil des Betriebssystems wirkt und nicht wie
+        eine Werbeseite.
+
+        Technisch: EIN Toplevel, dessen Inhaltsbereich pro Schritt geleert
+        und neu gezeichnet wird. Die BooleanVars der Ordner-Auswahl liegen
+        ausserhalb der Zeichenfunktion, damit die Auswahl beim Blaettern
+        erhalten bleibt.
+        """
+        self.attributes("-topmost", False)
+        top = ctk.CTkToplevel(self)
+        top.title(t("guide.title"))
+        top.geometry("660x640")
         top.attributes("-topmost", True)
         top.grab_set()
 
-        ctk.CTkLabel(
-            top, text="👋 Willkommen bei SmartSearch!", font=("Helvetica", 16, "bold")
-        ).pack(padx=20, pady=(20, 4), anchor="w")
+        schritte = ["prinzip", "funktionen", "datenschutz"]
+        if mit_ordnerauswahl:
+            schritte.append("ordner")
+        schritte.append("bedienung")
 
-        ctk.CTkLabel(
-            top,
-            text="Wähle, welche Ordner durchsucht werden sollen.\nDu kannst später jederzeit weitere hinzufügen.",
-            font=("Helvetica", 11), text_color="#78909c", justify="left"
-        ).pack(padx=20, pady=(0, 16), anchor="w")
+        zustand = {"index": 0}
 
         standard_ordner = [
-            ("Dokumente", os.path.expanduser("~/Documents")),
-            ("Downloads", os.path.expanduser("~/Downloads")),
-            ("Schreibtisch", os.path.expanduser("~/Desktop")),
+            (t("onboarding.documents"), os.path.expanduser("~/Documents")),
+            (t("onboarding.downloads"), os.path.expanduser("~/Downloads")),
+            (t("onboarding.desktop"), os.path.expanduser("~/Desktop")),
         ]
-
         checkbox_vars = {}
         for label, pfad in standard_ordner:
             if not os.path.isdir(pfad):
                 continue
-            var = ctk.BooleanVar(value=(label != "Downloads"))  # Downloads oft sehr groß - standardmäßig aus
-            cb = ctk.CTkCheckBox(top, text=f"{label}  ({pfad})", variable=var, font=("Helvetica", 11))
-            cb.pack(padx=20, pady=4, anchor="w")
-            checkbox_vars[pfad] = var
-
+            # Downloads ist bei vielen Nutzern sehr umfangreich und enthaelt
+            # ueberwiegend Belangloses - voreingestellt daher abgewaehlt,
+            # sonst dauert die erste Indexierung unnoetig lang.
+            checkbox_vars[pfad] = ctk.BooleanVar(value=(label != t("onboarding.downloads")))
         eigene_ordner = []
-        lbl_eigene = ctk.CTkLabel(top, text="", font=("Helvetica", 10), text_color="#78909c", justify="left")
 
-        def eigenen_ordner_hinzufuegen():
-            self.attributes("-topmost", False)
-            top.attributes("-topmost", False)
-            gewaehlt = filedialog.askdirectory(title="Weiteren Ordner hinzufügen", parent=top)
-            top.attributes("-topmost", True)
-            top.lift()
-            top.focus_force()
-            if gewaehlt and gewaehlt not in eigene_ordner:
-                eigene_ordner.append(gewaehlt)
-                lbl_eigene.configure(text="Zusätzlich:\n" + "\n".join(eigene_ordner))
-                lbl_eigene.pack(padx=20, pady=(4, 0), anchor="w")
+        GRAU = "#8a949b"
+        LINIE = ("#d8dcdf", "#3a3f43")
 
-        ctk.CTkButton(
-            top, text="+ Weiteren Ordner wählen...", fg_color="#37474f", hover_color="#263238",
-            command=eigenen_ordner_hinzufuegen
-        ).pack(padx=20, pady=(12, 0), anchor="w")
+        # ---------- Geruest ----------
+        kopf = ctk.CTkFrame(top, fg_color="transparent")
+        kopf.pack(fill="x", padx=38, pady=(26, 0))
 
-        def loslegen():
-            gewaehlte_ordner = [pfad for pfad, var in checkbox_vars.items() if var.get()]
-            gewaehlte_ordner.extend(eigene_ordner)
-            top.destroy()
-            if not gewaehlte_ordner:
-                self.setze_status("Kein Ordner ausgewählt - du kannst jederzeit über 'Ordner hinzufügen' starten.")
+        titel_label = ctk.CTkLabel(kopf, text="", font=("Helvetica", 19, "bold"), anchor="w")
+        titel_label.pack(side="left")
+
+        schritt_label = ctk.CTkLabel(kopf, text="", font=("Helvetica", 11), text_color=GRAU)
+        schritt_label.pack(side="right", pady=(6, 0))
+
+        trennlinie = ctk.CTkFrame(top, height=1, fg_color=LINIE)
+        trennlinie.pack(fill="x", padx=38, pady=(10, 0))
+
+        # REIHENFOLGE IST WICHTIG: Die Fussleiste muss VOR dem
+        # expandierenden Inhaltsbereich gepackt werden. Tk verteilt den
+        # Platz in der Reihenfolge der pack()-Aufrufe - stand der Inhalt
+        # mit expand=True zuerst, nahm er sich die gesamte Hoehe und
+        # schob die Knopfleiste aus dem Fenster. Dann liess sich der
+        # Assistent nicht mehr weiterblaettern.
+        fuss = ctk.CTkFrame(top, fg_color="transparent")
+        fuss.pack(side="bottom", fill="x", padx=38, pady=(12, 24))
+
+        inhalt = ctk.CTkFrame(top, fg_color="transparent")
+        inhalt.pack(fill="both", expand=True, padx=38, pady=(16, 0))
+
+        btn_zurueck = ctk.CTkButton(
+            fuss, text=t("guide.back"), width=92, height=30,
+            fg_color="transparent", hover_color=("#e6e9eb", "#3a3f43"),
+            text_color=("#3b464d", "#c8cfd4"), font=("Helvetica", 12),
+            command=lambda: blaettern(-1)
+        )
+        btn_zurueck.pack(side="left")
+
+        btn_skip = ctk.CTkButton(
+            fuss, text=t("guide.skip"), width=110, height=30,
+            fg_color="transparent", hover_color=("#e6e9eb", "#3a3f43"),
+            text_color=GRAU, font=("Helvetica", 12),
+            command=lambda: abschliessen(uebersprungen=True)
+        )
+        btn_skip.pack(side="left", padx=(4, 0))
+
+        btn_weiter = ctk.CTkButton(
+            fuss, text=t("guide.next"), width=124, height=32,
+            fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, font=("Helvetica", 12, "bold"),
+            command=lambda: blaettern(1)
+        )
+        btn_weiter.pack(side="right")
+
+        # ---------- Bausteine ----------
+        def fliesstext(text, groesse=12.5, pady=(0, 16), farbe=GRAU, eltern=None):
+            ctk.CTkLabel(
+                eltern or inhalt, text=text, font=("Helvetica", int(groesse)),
+                text_color=farbe, justify="left", anchor="w", wraplength=560
+            ).pack(pady=pady, anchor="w", fill="x")
+
+        def zwischentitel(text, pady=(0, 6), eltern=None):
+            ctk.CTkLabel(
+                eltern or inhalt, text=text, font=("Helvetica", 12, "bold"),
+                anchor="w", height=18
+            ).pack(pady=pady, anchor="w")
+
+        def aufzaehlung(text, eltern=None, breite=560, groesse=12):
+            """Eine Zeile je Eintrag, eingerueckt statt mit Aufzaehlungs-
+            zeichen - ruhiger im Schriftbild als eine Punkteliste.
+
+            height wird ausdruecklich gesetzt: CTkLabel ist von Haus aus 28
+            Pixel hoch, was bei einzeiligen Eintraegen einen unangenehm
+            weiten Zeilenfall ergibt."""
+            for zeile in text.split("\n"):
+                if not zeile.strip():
+                    continue
+                ctk.CTkLabel(
+                    eltern or inhalt, text=zeile, font=("Helvetica", groesse),
+                    text_color=GRAU, justify="left", anchor="w", wraplength=breite,
+                    height=17
+                ).pack(pady=0, anchor="w", padx=(2, 0))
+
+        # ---------- Schritt 1: Suchprinzip ----------
+        def zeichne_prinzip():
+            fliesstext(t("guide.s1_text"))
+            zwischentitel(t("guide.s1_examples_title"), pady=(6, 10))
+
+            tabelle = ctk.CTkFrame(inhalt, fg_color="transparent")
+            tabelle.pack(fill="x", pady=(0, 4))
+            tabelle.grid_columnconfigure(0, minsize=250)
+
+            beispiele = [
+                (t("guide.s1_ex1_query"), t("guide.s1_ex1_hit")),
+                (t("guide.s1_ex2_query"), t("guide.s1_ex2_hit")),
+                (t("guide.s1_ex3_query"), t("guide.s1_ex3_hit")),
+            ]
+            for i, (anfrage, treffer) in enumerate(beispiele):
+                ctk.CTkLabel(
+                    tabelle, text="»" + anfrage + "«", font=("Helvetica", 12),
+                    anchor="w"
+                ).grid(row=i, column=0, sticky="w", pady=4)
+                ctk.CTkLabel(
+                    tabelle, text=treffer, font=("Menlo", 11), text_color=GRAU, anchor="w"
+                ).grid(row=i, column=1, sticky="w", pady=4)
+
+            fliesstext(t("guide.s1_footer"), groesse=11.5, pady=(22, 0))
+
+        # ---------- Schritt 2: Funktionsumfang ----------
+        def zeichne_funktionen():
+            fliesstext(t("guide.s2_text"), pady=(0, 14))
+
+            spalten = ctk.CTkFrame(inhalt, fg_color="transparent")
+            spalten.pack(fill="both", expand=True)
+            spalten.grid_columnconfigure(0, weight=1, uniform="s")
+            spalten.grid_columnconfigure(1, weight=1, uniform="s")
+
+            links = ctk.CTkFrame(spalten, fg_color="transparent")
+            links.grid(row=0, column=0, sticky="nw", padx=(0, 18))
+            rechts = ctk.CTkFrame(spalten, fg_color="transparent")
+            rechts.grid(row=0, column=1, sticky="nw")
+
+            gruppen_links = [("guide.s2_g1_title", "guide.s2_g1_items"),
+                             ("guide.s2_g2_title", "guide.s2_g2_items")]
+            gruppen_rechts = [("guide.s2_g3_title", "guide.s2_g3_items"),
+                              ("guide.s2_g4_title", "guide.s2_g4_items"),
+                              ("guide.s2_g5_title", "guide.s2_g5_items")]
+
+            for spalte, gruppen in ((links, gruppen_links), (rechts, gruppen_rechts)):
+                for i, (titel_key, items_key) in enumerate(gruppen):
+                    zwischentitel(t(titel_key), pady=((0 if i == 0 else 14), 5), eltern=spalte)
+                    aufzaehlung(t(items_key), eltern=spalte, breite=270, groesse=11)
+
+        # ---------- Schritt 3: Datenschutz ----------
+        def zeichne_datenschutz():
+            fliesstext(t("guide.s3_text"), pady=(0, 12))
+            aufzaehlung(
+                t("guide.s3_point1") + "\n" + t("guide.s3_point2") + "\n" + t("guide.s3_point3")
+            )
+            ctk.CTkFrame(inhalt, height=1, fg_color=LINIE).pack(fill="x", pady=(22, 16))
+            zwischentitel(t("guide.s3_download_title"), pady=(0, 6))
+            fliesstext(t("guide.s3_download_text"), groesse=11.5, pady=(0, 0))
+
+        # ---------- Schritt 4: Ordner ----------
+        def zeichne_ordner():
+            fliesstext(t("guide.s4_text"), pady=(0, 18))
+
+            for label, pfad in standard_ordner:
+                if pfad not in checkbox_vars:
+                    continue
+                zeile = ctk.CTkFrame(inhalt, fg_color="transparent")
+                zeile.pack(fill="x", pady=5, anchor="w")
+                ctk.CTkCheckBox(
+                    zeile, text=label, variable=checkbox_vars[pfad],
+                    font=("Helvetica", 12.5), checkbox_width=18, checkbox_height=18,
+                    fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, width=150
+                ).pack(side="left")
+                ctk.CTkLabel(
+                    zeile, text=pfad, font=("Helvetica", 11), text_color=GRAU
+                ).pack(side="left", padx=(10, 0))
+
+            lbl_eigene = ctk.CTkLabel(
+                inhalt, text="", font=("Helvetica", 11), text_color=GRAU, justify="left", anchor="w"
+            )
+            if eigene_ordner:
+                lbl_eigene.configure(text=t("onboarding.extra_prefix") + "\n".join(eigene_ordner))
+                lbl_eigene.pack(pady=(14, 0), anchor="w")
+
+            def eigenen_ordner_hinzufuegen():
+                # Beide Fenster kurz aus dem Vordergrund nehmen, sonst
+                # erscheint der Systemdialog dahinter und die Anwendung
+                # wirkt blockiert.
+                self.attributes("-topmost", False)
+                top.attributes("-topmost", False)
+                gewaehlt = filedialog.askdirectory(title=t("onboarding.picker_title"), parent=top)
+                top.attributes("-topmost", True)
+                top.lift()
+                top.focus_force()
+                if gewaehlt and gewaehlt not in eigene_ordner:
+                    eigene_ordner.append(gewaehlt)
+                    lbl_eigene.configure(text=t("onboarding.extra_prefix") + "\n".join(eigene_ordner))
+                    lbl_eigene.pack(pady=(14, 0), anchor="w")
+
+            ctk.CTkButton(
+                inhalt, text=t("onboarding.add_folder_button"), height=30, width=210,
+                fg_color="transparent", border_width=1, border_color=LINIE,
+                text_color=("#3b464d", "#c8cfd4"), hover_color=("#e6e9eb", "#3a3f43"),
+                font=("Helvetica", 12), command=eigenen_ordner_hinzufuegen
+            ).pack(pady=(20, 0), anchor="w")
+
+        # ---------- Schritt 5: Bedienung ----------
+        def zeichne_bedienung():
+            fliesstext(t("guide.s5_text"), pady=(0, 18))
+            zwischentitel(t("guide.s5_tips_title"), pady=(0, 10))
+            for key in ("guide.s5_tip1", "guide.s5_tip2", "guide.s5_tip3"):
+                ctk.CTkLabel(
+                    inhalt, text=t(key), font=("Helvetica", 12), text_color=GRAU,
+                    justify="left", anchor="w", wraplength=560
+                ).pack(pady=(0, 8), anchor="w", fill="x")
+            ctk.CTkFrame(inhalt, height=1, fg_color=LINIE).pack(fill="x", pady=(24, 14))
+            fliesstext(t("guide.s5_footer"), groesse=11.5, pady=(0, 0))
+
+        zeichner = {
+            "prinzip": (zeichne_prinzip, "guide.s1_heading"),
+            "funktionen": (zeichne_funktionen, "guide.s2_heading"),
+            "datenschutz": (zeichne_datenschutz, "guide.s3_heading"),
+            "ordner": (zeichne_ordner, "guide.s4_heading"),
+            "bedienung": (zeichne_bedienung, "guide.s5_heading"),
+        }
+
+        # ---------- Navigation ----------
+        def zeichne():
+            for kind in inhalt.winfo_children():
+                kind.destroy()
+            i = zustand["index"]
+            zeichenfunktion, titel_key = zeichner[schritte[i]]
+            titel_label.configure(text=t(titel_key))
+            schritt_label.configure(text=t("guide.step_label", n=i + 1, gesamt=len(schritte)))
+            zeichenfunktion()
+
+            letzter = (i == len(schritte) - 1)
+            btn_weiter.configure(text=t("guide.finish") if letzter else t("guide.next"))
+            # Auf der ersten Seite nur ausgrauen statt ausblenden, damit die
+            # Fussleiste beim Blaettern nicht springt.
+            btn_zurueck.configure(state="disabled" if i == 0 else "normal")
+            if letzter:
+                btn_skip.pack_forget()
+            else:
+                btn_skip.pack(side="left", padx=(4, 0))
+
+        def blaettern(richtung):
+            neuer = zustand["index"] + richtung
+            if neuer < 0:
                 return
+            if neuer >= len(schritte):
+                abschliessen(uebersprungen=False)
+                return
+            zustand["index"] = neuer
+            zeichne()
+
+        def abschliessen(uebersprungen):
+            gewaehlte_ordner = []
+            if mit_ordnerauswahl:
+                gewaehlte_ordner = [p for p, var in checkbox_vars.items() if var.get()]
+                gewaehlte_ordner.extend(eigene_ordner)
+
+            try:
+                top.grab_release()
+            except Exception:
+                pass
+            top.destroy()
+
+            if not mit_ordnerauswahl:
+                return
+
+            if uebersprungen:
+                self.setze_status(t("onboarding.status_skipped"))
+                return
+            if not gewaehlte_ordner:
+                self.setze_status(t("onboarding.status_none_selected"))
+                return
+
             for ordner in gewaehlte_ordner:
                 smart_search.befehl_ordner_hinzufuegen(ordner)
             self.starte_ordner_überwachung()
             self.index_aktualisieren()
 
-        def ueberspringen():
-            top.destroy()
-            self.setze_status("Übersprungen - füge jederzeit über 'Ordner hinzufügen' einen Ordner hinzu.")
+        # Das Schliessen ueber das Fenstersymbol verhaelt sich wie
+        # "Ueberspringen" - ein halb durchlaufener Assistent darf keinen
+        # halben Zustand hinterlassen.
+        top.protocol("WM_DELETE_WINDOW", lambda: abschliessen(uebersprungen=True))
 
-        button_zeile = ctk.CTkFrame(top, fg_color="transparent")
-        button_zeile.pack(side="bottom", fill="x", padx=20, pady=20)
-
-        ctk.CTkButton(
-            button_zeile, text="Überspringen", fg_color="transparent", hover_color=("#e0e0e0", "#3a3a3a"),
-            command=ueberspringen
-        ).pack(side="left")
-
-        ctk.CTkButton(
-            button_zeile, text="🚀 Loslegen", fg_color="#2e7d32", hover_color="#1b5e20",
-            command=loslegen
-        ).pack(side="right")
+        zeichne()
 
     def einstellungen_exportieren(self):
         self.attributes("-topmost", False)
         pfad = filedialog.asksaveasfilename(
-            title="Einstellungen exportieren", defaultextension=".json",
+            title=t("backup.export_title"), defaultextension=".json",
             initialfile="smartsearch_einstellungen.json", parent=self
         )
         self.attributes("-topmost", True)
@@ -945,14 +1828,14 @@ class SmartSearchNotchWindow(ctk.CTk):
             return
         try:
             smart_search.exportiere_konfiguration(pfad)
-            self.setze_status(f"Einstellungen exportiert: {os.path.basename(pfad)}")
+            self.setze_status(t("backup.export_status", name=os.path.basename(pfad)))
         except Exception as e:
-            self.setze_status(f"Export fehlgeschlagen: {e}")
+            self.setze_status(t("backup.export_error", fehler=e))
 
     def einstellungen_importieren(self):
         self.attributes("-topmost", False)
         pfad = filedialog.askopenfilename(
-            title="Einstellungen importieren", filetypes=[("JSON-Datei", "*.json")], parent=self
+            title=t("backup.import_title"), filetypes=[(t("backup.import_filetype"), "*.json")], parent=self
         )
         self.attributes("-topmost", True)
         self.lift()
@@ -964,19 +1847,118 @@ class SmartSearchNotchWindow(ctk.CTk):
             anzahl_ordner, anzahl_fav = smart_search.importiere_konfiguration(pfad)
             self.favoriten = smart_search.lade_favoriten()
             self.starte_ordner_überwachung()
-            self.setze_status(f"Importiert: {anzahl_ordner} Ordner, {anzahl_fav} Favoriten. Jetzt 'Index aktualisieren' nicht vergessen.")
+            self.setze_status(t("backup.import_status", ordner=anzahl_ordner, favoriten=anzahl_fav))
         except Exception as e:
-            self.setze_status(f"Import fehlgeschlagen: {e}")
+            self.setze_status(t("backup.import_error", fehler=e))
+
+    # ---------- AUTO-UPDATE ----------
+
+    def pruefe_auf_updates(self, manuell=False):
+        """Fragt UPDATE_CHECK_URL nach der neuesten Version ab und zeigt
+        bei Bedarf einen Hinweis mit Download-Link.
+
+        manuell=True: Nutzer hat aktiv auf "Nach Updates suchen" geklickt
+        -> auch anzeigen, wenn schon die neueste Version läuft oder die
+        Prüfung fehlschlägt (Netzwerkfehler etc.).
+        manuell=False: automatischer Hintergrund-Check beim Start -> bei
+        jedem Fehler oder wenn kein Update verfügbar ist, still bleiben
+        und den Nutzer nicht mit einer Meldung stören.
+
+        Läuft in einem Hintergrund-Thread, damit ein langsames/fehlendes
+        Netzwerk die Oberfläche nicht blockiert.
+        """
+        def _hintergrund():
+            try:
+                # Mit eigenem User-Agent anfragen. Ohne einen solchen sendet
+                # urllib "Python-urllib/3.x", und Schutzmechanismen vor
+                # automatisierten Zugriffen - bei Cloudflare etwa der
+                # Bot-Schutz - weisen solche Anfragen ab. Das Ergebnis war
+                # ein HTTP 403, das in der Oberflaeche wie ein
+                # Netzwerkproblem aussah, obwohl die Verbindung stand.
+                anfrage = urllib.request.Request(
+                    UPDATE_CHECK_URL,
+                    headers={
+                        "User-Agent": f"SmartSearch/{APP_VERSION} (macOS; +https://smartsearch-app.com)",
+                        "Accept": "application/json",
+                    },
+                )
+                with urllib.request.urlopen(anfrage, timeout=UPDATE_CHECK_TIMEOUT_SEK) as antwort:
+                    daten = json.loads(antwort.read().decode("utf-8"))
+                neueste_version = str(daten.get("version", "")).strip()
+                download_url = daten.get("download_url", "")
+                notizen = daten.get("notes", "")
+            except Exception as e:
+                if manuell:
+                    self.after(0, lambda e=e: self._update_fehlgeschlagen(e))
+                return
+
+            if neueste_version and _version_tuple(neueste_version) > _version_tuple(APP_VERSION):
+                self.after(0, lambda: self._zeige_update_verfuegbar(neueste_version, download_url, notizen))
+            elif manuell:
+                self.after(0, self._update_aktuell)
+
+        threading.Thread(target=_hintergrund, daemon=True).start()
+
+    def _update_fehlgeschlagen(self, fehler):
+        # Absichtlich NICHT pauschal "keine Internetverbindung" behaupten -
+        # solange UPDATE_CHECK_URL noch der Platzhalter ist (siehe Konstante
+        # oben im Code), schlägt die Prüfung IMMER fehl, unabhängig vom
+        # Internet. Das hat beim Testen sonst fälschlich nach einem
+        # Netzwerkproblem ausgesehen.
+        messagebox.showinfo(
+            t("update.check_failed_title"),
+            t("update.check_failed_body", fehler=fehler),
+        )
+
+    def _update_aktuell(self):
+        messagebox.showinfo(t("update.up_to_date_title"), t("update.up_to_date_body", version=APP_VERSION))
+
+    def _zeige_update_verfuegbar(self, neue_version, download_url, notizen):
+        self.attributes("-topmost", False)
+        top = ctk.CTkToplevel(self)
+        top.title(t("update.available_title"))
+        top.geometry("400x260")
+        top.attributes("-topmost", True)
+        top.grab_set()
+
+        ctk.CTkLabel(
+            top, text=t("update.available_heading", version=neue_version), font=("Helvetica", 14, "bold")
+        ).pack(padx=20, pady=(20, 4), anchor="w")
+        ctk.CTkLabel(
+            top, text=t("update.available_current", version=APP_VERSION), font=("Helvetica", 11), text_color="#78909c"
+        ).pack(padx=20, pady=(0, 10), anchor="w")
+
+        if notizen:
+            ctk.CTkLabel(
+                top, text=notizen, font=("Helvetica", 10), text_color="#78909c",
+                justify="left", wraplength=360
+            ).pack(padx=20, pady=(0, 10), anchor="w")
+
+        def herunterladen():
+            if download_url:
+                webbrowser.open(download_url)
+            top.destroy()
+
+        button_zeile = ctk.CTkFrame(top, fg_color="transparent")
+        button_zeile.pack(side="bottom", fill="x", padx=20, pady=20)
+        ctk.CTkButton(
+            button_zeile, text=t("update.later_button"), fg_color="transparent", hover_color=("#e0e0e0", "#3a3a3a"),
+            command=top.destroy
+        ).pack(side="left")
+        ctk.CTkButton(
+            button_zeile, text=t("update.download_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            command=herunterladen
+        ).pack(side="right")
 
     def ordner_verwalten_gui(self):
         self.attributes("-topmost", False)
         top = ctk.CTkToplevel(self)
-        top.title("Überwachte Ordner")
+        top.title(t("folders.dialog_title"))
         top.geometry("520x360")
         top.attributes("-topmost", True)
         top.grab_set()
 
-        lbl = ctk.CTkLabel(top, text="📂 Überwachte Ordner", font=("Helvetica", 14, "bold"))
+        lbl = ctk.CTkLabel(top, text=t("folders.heading"), font=("Helvetica", 14, "bold"))
         lbl.pack(padx=15, pady=(15, 5), anchor="w")
 
         scroll = ctk.CTkScrollableFrame(top, corner_radius=8)
@@ -990,7 +1972,7 @@ class SmartSearchNotchWindow(ctk.CTk):
             ordner_liste = config.get("ordner", [])
 
             if not ordner_liste:
-                ctk.CTkLabel(scroll, text="Noch keine Ordner hinzugefügt.", font=("Helvetica", 12), text_color="#78909c").pack(pady=20)
+                ctk.CTkLabel(scroll, text=t("folders.empty"), font=("Helvetica", 12), text_color="#78909c").pack(pady=20)
                 return
 
             for o in ordner_liste:
@@ -1002,10 +1984,8 @@ class SmartSearchNotchWindow(ctk.CTk):
 
                 def _entfernen_mit_bestaetigung(pfad=o):
                     bestaetigt = messagebox.askyesno(
-                        "Ordner entfernen?",
-                        f"Soll dieser Ordner nicht mehr durchsucht werden?\n\n{pfad}\n\n"
-                        "Bereits indexierte Dateien aus diesem Ordner bleiben bis zur\n"
-                        "nächsten Index-Aktualisierung weiter im Suchindex.",
+                        t("folders.remove_confirm_title"),
+                        t("folders.remove_confirm_body", pfad=pfad),
                         parent=top,
                     )
                     if bestaetigt:
@@ -1014,17 +1994,17 @@ class SmartSearchNotchWindow(ctk.CTk):
                         self.starte_ordner_überwachung()
 
                 btn_del = ctk.CTkButton(
-                    row, text="Entfernen", width=70, height=24, fg_color="#c62828", hover_color="#b71c1c", font=("Helvetica", 10),
+                    row, text=t("folders.remove_button"), width=70, height=24, fg_color=farben.WARNUNG, hover_color=farben.WARNUNG_HOVER, font=("Helvetica", 10),
                     command=_entfernen_mit_bestaetigung
                 )
                 btn_del.pack(side="right", padx=4)
 
         lade_ordner_liste()
 
-        btn_add = ctk.CTkButton(top, text="+ Ordner hinzufügen", fg_color="#2e7d32", hover_color="#1b5e20", command=lambda: [self.ordner_hinzufuegen_gui(), lade_ordner_liste()])
+        btn_add = ctk.CTkButton(top, text=t("folders.add_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda: [self.ordner_hinzufuegen_gui(), lade_ordner_liste()])
         btn_add.pack(side="left", padx=15, pady=(0, 15))
 
-        btn_close = ctk.CTkButton(top, text="Schließen", command=top.destroy)
+        btn_close = ctk.CTkButton(top, text=t("folders.close_button"), command=top.destroy)
         btn_close.pack(side="right", padx=15, pady=(0, 15))
 
     # ---------- INDEX MIT ECHTER PROZENT-ANZEIGE ----------
@@ -1033,26 +2013,26 @@ class SmartSearchNotchWindow(ctk.CTk):
         # Verhindert, dass ein manueller Klick und ein Watchdog-Trigger
         # gleichzeitig zwei Indexierungs-Threads starten.
         if not self.indexierung_lock.acquire(blocking=False):
-            self.setze_status("Indexierung läuft bereits...")
+            self.setze_status(t("index.status_already_running"))
             return
 
         config = smart_search.lade_config()
         ordner_liste = config.get("ordner", [])
         if not ordner_liste:
-            self.setze_status("Bitte zuerst einen Ordner hinzufügen.")
+            self.setze_status(t("index.status_need_folder"))
             self.indexierung_lock.release()
             return
 
         self.indexierung_laeuft = True
         self.indexierung_abbrechen = False
         self._buttons_sperren()
-        self.zeige_fortschritt(0.05, "Starte Indexierung... (du kannst währenddessen schon suchen)")
+        self.zeige_fortschritt(0.05, t("index.status_starting"))
         self.btn_index_abbrechen.grid(row=0, column=2, sticky="e", padx=4)
         threading.Thread(target=self._index_bg, args=(ordner_liste,), daemon=True).start()
 
     def index_abbrechen(self):
         self.indexierung_abbrechen = True
-        self.setze_status("Breche Indexierung ab...")
+        self.setze_status(t("index.status_cancelling"))
 
     def _index_bg(self, ordner_liste):
         # FIX: aktualisiere_index() erwartet einen ORDNER (macht intern
@@ -1064,7 +2044,23 @@ class SmartSearchNotchWindow(ctk.CTk):
         # Backend übernimmt intern weiterhin die inkrementelle Prüfung
         # (nur neue/geänderte Dateien werden neu eingebettet).
         try:
-            modell = smart_search.geladenes_modell()
+            # Beim allerersten Start muss erst das KI-Modell geladen werden
+            # (einmalig ca. 2,3 GB). Ohne sichtbaren Fortschritt sieht die
+            # App dabei minutenlang aus, als haenge sie - deshalb wird der
+            # Download ueber dieselbe Statuszeile gemeldet wie spaeter die
+            # Indexierung.
+            def modell_fortschritt(geladen, gesamt):
+                anteil = min(geladen / gesamt, 0.99) if gesamt else 0
+                text = t(
+                    "model.download_progress",
+                    geladen=self._gb_text(geladen), gesamt=self._gb_text(gesamt),
+                )
+                self.after(0, lambda: self.zeige_fortschritt(anteil, text))
+
+            if not smart_search.modell_ist_vorhanden():
+                self.after(0, lambda: self.zeige_fortschritt(0, t("model.download_start")))
+
+            modell = smart_search.geladenes_modell(fortschritt_fn=modell_fortschritt)
 
             # Gesamtzahl vorab zählen, für einen korrekten Prozentwert
             # über alle Ordner hinweg.
@@ -1100,16 +2096,19 @@ class SmartSearchNotchWindow(ctk.CTk):
                         if aktueller_batch > 0:
                             rate = elapsed / aktueller_batch
                             rest_sek = rate * (gesamt_batches - aktueller_batch)
-                            text = f"{dateiname} (noch ca. {self._dauer_text(rest_sek)})"
-                    self.after(0, lambda t=text: self.zeige_fortschritt(0.95, t))
+                            text = t("index.progress_calculating", text=dateiname, zeit=self._dauer_text(rest_sek))
+                    self.after(0, lambda txt=text: self.zeige_fortschritt(0.95, txt))
                     return
                 zaehler["n"] += 1
                 prozent = min(zaehler["n"] / gesamt, 1.0)
                 elapsed = time.time() - start_zeit
                 rate = elapsed / zaehler["n"]
                 rest_sek = rate * (gesamt - zaehler["n"])
-                text = f"Indexiere ({zaehler['n']}/{gesamt}): {dateiname[:25]}... (noch ca. {self._dauer_text(rest_sek)})"
-                self.after(0, lambda p=prozent, t=text: self.zeige_fortschritt(p, t))
+                text = t(
+                    "index.progress_indexing", n=zaehler["n"], gesamt=gesamt,
+                    name=dateiname[:25], zeit=self._dauer_text(rest_sek)
+                )
+                self.after(0, lambda p=prozent, txt=text: self.zeige_fortschritt(p, txt))
 
             abgebrochen = False
             for o in ordner_liste:
@@ -1122,27 +2121,145 @@ class SmartSearchNotchWindow(ctk.CTk):
                     o, modell=modell, still=True, fortschritt_fn=fortschritt
                 )
 
+            if not abgebrochen:
+                # Karteileichen entfernen: Eintraege aus Ordnern, die nicht
+                # mehr ueberwacht werden, und Dateien, die es nicht mehr
+                # gibt. Ohne das waechst index.pkl endlos und liefert
+                # Treffer aus laengst entfernten Ordnern.
+                try:
+                    smart_search.bereinige_index()
+                except Exception as e:
+                    print(f"[Index] Aufraeumen uebersprungen: {e}")
+
             if abgebrochen:
                 self.after(0, self._index_abgebrochen)
             else:
                 self.after(0, self._index_fertig)
+        except smart_search.ProgrammUnvollstaendig as e:
+            # Muss VOR ModellDownloadFehler stehen: ein fehlender
+            # Programmteil sieht an dieser Stelle aus wie ein
+            # Download-Problem, ist aber keines - der Nutzer soll nicht
+            # vergeblich seine Verbindung prüfen.
+            self.after(0, lambda e=e: self._programm_unvollstaendig(e))
+        except smart_search.ModellDownloadFehler as e:
+            # Getrennt behandelt: das ist kein Indexierungsfehler, sondern
+            # fast immer "beim ersten Start kein Internet". Ein roher
+            # Netzwerk-Stacktrace hilft an dieser Stelle niemandem.
+            self.after(0, lambda e=e: self._modell_download_fehlgeschlagen(e))
         except Exception as e:
-            self.after(0, lambda: self._index_fehlgeschlagen(e))
+            self.after(0, lambda e=e: self._index_fehlgeschlagen(e))
         finally:
             self.indexierung_laeuft = False
             self.indexierung_lock.release()
 
+    @staticmethod
+    def _gb_text(bytes_zahl):
+        """Bytes als "1,4 GB" - mit Komma, weil die Anzeige im deutschen
+        Teil der Oberflaeche sonst fremd wirkt."""
+        gb = bytes_zahl / 1_000_000_000
+        return f"{gb:.1f}".replace(".", ",") + " GB"
+
+    def _modell_download_fehlgeschlagen(self, fehler):
+        """Erklaert den einen Fall, der einen neuen Nutzer sonst ratlos
+        zuruecklaesst: die App wurde gerade installiert, das KI-Modell fehlt
+        noch, und es ist kein Internet da."""
+        self._buttons_entsperren()
+        self.verstecke_fortschritt()
+        self.setze_status(t("model.download_failed_status"))
+
+        self.attributes("-topmost", False)
+        top = ctk.CTkToplevel(self)
+        top.title(t("model.download_failed_title"))
+        top.geometry("460x260")
+        top.attributes("-topmost", True)
+
+        ctk.CTkLabel(
+            top, text=t("model.download_failed_heading"), font=("Helvetica", 15, "bold")
+        ).pack(padx=20, pady=(20, 8), anchor="w")
+
+        ctk.CTkLabel(
+            top, text=t("model.download_failed_body"), font=("Helvetica", 11),
+            text_color="#78909c", justify="left", wraplength=410
+        ).pack(padx=20, pady=(0, 10), anchor="w")
+
+        ctk.CTkLabel(
+            top, text=t("model.download_failed_details", fehler=fehler),
+            font=("Helvetica", 10), text_color="#90a4ae", justify="left", wraplength=410
+        ).pack(padx=20, pady=(0, 12), anchor="w")
+
+        zeile = ctk.CTkFrame(top, fg_color="transparent")
+        zeile.pack(side="bottom", fill="x", padx=20, pady=16)
+
+        ctk.CTkButton(
+            zeile, text=t("model.download_failed_close"), fg_color="transparent",
+            hover_color=("#e0e0e0", "#3a3a3a"), command=top.destroy
+        ).pack(side="left")
+
+        def erneut_versuchen():
+            top.destroy()
+            self.index_aktualisieren()
+
+        ctk.CTkButton(
+            zeile, text=t("model.download_failed_retry"), fg_color=farben.SEITE_KNOPF,
+            hover_color=farben.SEITE_KNOPF_HOVER, command=erneut_versuchen
+        ).pack(side="right")
+
+    def _programm_unvollstaendig(self, fehler):
+        """Der Gegenfall zum Download-Dialog: hier fehlt kein Modell,
+        sondern ein Programmteil. Kein "Erneut versuchen" - das würde nur
+        denselben Fehler ein zweites Mal zeigen."""
+        self._buttons_entsperren()
+        self.verstecke_fortschritt()
+        self.setze_status(t("model.incomplete_status"))
+
+        self.attributes("-topmost", False)
+        top = ctk.CTkToplevel(self)
+        top.title(t("model.incomplete_title"))
+        top.geometry("460x300")
+        top.attributes("-topmost", True)
+
+        ctk.CTkLabel(
+            top, text=t("model.incomplete_heading"), font=("Helvetica", 15, "bold")
+        ).pack(padx=20, pady=(20, 8), anchor="w")
+
+        ctk.CTkLabel(
+            top, text=t("model.incomplete_body"), font=("Helvetica", 11),
+            text_color="#78909c", justify="left", wraplength=410
+        ).pack(padx=20, pady=(0, 10), anchor="w")
+
+        ctk.CTkLabel(
+            top, text=t("model.download_failed_details", fehler=fehler),
+            font=("Helvetica", 10), text_color="#90a4ae", justify="left", wraplength=410
+        ).pack(padx=20, pady=(0, 12), anchor="w")
+
+        zeile = ctk.CTkFrame(top, fg_color="transparent")
+        zeile.pack(side="bottom", fill="x", padx=20, pady=16)
+
+        ctk.CTkButton(
+            zeile, text=t("model.download_failed_close"), fg_color="transparent",
+            hover_color=("#e0e0e0", "#3a3a3a"), command=top.destroy
+        ).pack(side="left")
+
+        def melden():
+            top.destroy()
+            self.oeffne_rueckmeldung(vorbelegung=str(fehler))
+
+        ctk.CTkButton(
+            zeile, text=t("model.incomplete_report"), fg_color=farben.SEITE_KNOPF,
+            hover_color=farben.SEITE_KNOPF_HOVER, command=melden
+        ).pack(side="right")
+
     def _index_fertig(self):
         self._buttons_entsperren()
         self.verstecke_fortschritt()
-        self.setze_status("Index erfolgreich aktualisiert! ✅")
-        send_macos_notification("SmartSearch", "Indexierung erfolgreich abgeschlossen! ✅")
+        self.setze_status(t("index.status_done"))
+        plattform.benachrichtigung(t("index.notification_title"), t("index.notification_body"))
         self.aktualisiere_fehler_anzeige()
 
     def _index_abgebrochen(self):
         self._buttons_entsperren()
         self.verstecke_fortschritt()
-        self.setze_status("Indexierung abgebrochen.")
+        self.setze_status(t("index.status_cancelled"))
         self.aktualisiere_fehler_anzeige()
 
     # ---------- FEHLERSICHTBARKEIT (nicht lesbare Dateien) ----------
@@ -1154,8 +2271,11 @@ class SmartSearchNotchWindow(ctk.CTk):
         Autostart im Hintergrund nie bemerkt."""
         anzahl = len(smart_search.fehlgeschlagene_dateien())
         if anzahl > 0:
-            self.btn_fehler_anzeigen.configure(text=f"⚠️ {anzahl} Datei(en) nicht lesbar")
-            self.btn_fehler_anzeigen.pack(padx=12, pady=(0, 3), fill="x", after=self.index_button)
+            self.btn_fehler_anzeigen.configure(text=t("sidebar.errors_button", anzahl=anzahl))
+            # Direkt unter "Index aktualisieren" einsortiert (after=
+            # index_button bestimmt die Stapel-Position) - noch über dem
+            # "⚙ Einstellungen..."-Link.
+            self.btn_fehler_anzeigen.pack(padx=12, pady=(3, 3), fill="x", after=self.index_button)
         else:
             self.btn_fehler_anzeigen.pack_forget()
 
@@ -1168,20 +2288,20 @@ class SmartSearchNotchWindow(ctk.CTk):
 
         self.attributes("-topmost", False)
         top = ctk.CTkToplevel(self)
-        top.title("Nicht lesbare Dateien")
+        top.title(t("errors.dialog_title"))
         top.geometry("560x400")
         top.attributes("-topmost", True)
         top.grab_set()
 
         lbl = ctk.CTkLabel(
-            top, text=f"⚠️ {len(dateien)} Datei(en) konnten nicht gelesen werden",
+            top, text=t("errors.dialog_heading", anzahl=len(dateien)),
             font=("Helvetica", 14, "bold")
         )
         lbl.pack(padx=15, pady=(15, 5), anchor="w")
 
         hinweis = ctk.CTkLabel(
             top,
-            text="Häufige Ursachen: beschädigte/leere PDFs, abgebrochene Downloads,\noder OCR war zum Zeitpunkt der Indexierung noch nicht installiert.",
+            text=t("errors.dialog_reason"),
             font=("Helvetica", 10), text_color="#78909c", justify="left"
         )
         hinweis.pack(padx=15, pady=(0, 10), anchor="w")
@@ -1195,22 +2315,22 @@ class SmartSearchNotchWindow(ctk.CTk):
         def neuversuch():
             entfernt = smart_search.entferne_fehlgeschlagene_markierung()
             top.destroy()
-            self.setze_status(f"{entfernt} Datei(en) werden beim nächsten 'Index aktualisieren' erneut versucht.")
+            self.setze_status(t("errors.retry_status", anzahl=entfernt))
             self.aktualisiere_fehler_anzeige()
 
         btn_retry = ctk.CTkButton(
-            top, text="🔄 Alle erneut versuchen (beim nächsten Indexieren)",
-            fg_color="#2e7d32", hover_color="#1b5e20", command=neuversuch
+            top, text=t("errors.retry_button"),
+            fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=neuversuch
         )
         btn_retry.pack(side="left", padx=15, pady=(0, 15))
 
-        btn_close = ctk.CTkButton(top, text="Schließen", command=top.destroy)
+        btn_close = ctk.CTkButton(top, text=t("errors.close_button"), command=top.destroy)
         btn_close.pack(side="right", padx=15, pady=(0, 15))
 
     def _index_fehlgeschlagen(self, fehler):
         self._buttons_entsperren()
         self.verstecke_fortschritt()
-        self.setze_status(f"Fehler bei Indexierung: {fehler}")
+        self.setze_status(t("index.status_error", fehler=fehler))
         self.aktualisiere_fehler_anzeige()
 
     # ---------- SUCHE ----------
@@ -1222,9 +2342,10 @@ class SmartSearchNotchWindow(ctk.CTk):
 
         self.verlauf_aktualisieren(anfrage)
         self._suche_button_sperren()
-        self.setze_status("Suche läuft...")
+        self.setze_status(t("search.status_searching"))
         ausschluss = self.ausgeschlossene_typen()
-        zeitraum = self.zeitraum_menu.get()
+        zeitraum_anzeige = self.zeitraum_menu.get()
+        zeitraum = self.zeitraum_anzeige_zu_code.get(zeitraum_anzeige, "alle")
 
         threading.Thread(target=self._suche_bg, args=(anfrage, ausschluss, zeitraum), daemon=True).start()
 
@@ -1233,21 +2354,27 @@ class SmartSearchNotchWindow(ctk.CTk):
             treffer = smart_search.suche_intern(anfrage, top_n=15, ausgeschlossene_typen=ausschluss, zeitraum=zeitraum)
             self.after(0, self._zeige_treffer, treffer, anfrage)
         except Exception as e:
-            self.after(0, lambda: self._suche_fehlgeschlagen(e))
+            self.after(0, lambda e=e: self._suche_fehlgeschlagen(e))
 
     def _suche_fehlgeschlagen(self, fehler):
         self._suche_button_entsperren()
-        self.setze_status(f"Fehler bei Suche: {fehler}")
+        self.setze_status(t("search.status_error", fehler=fehler))
 
     def _zeige_treffer(self, treffer, anfrage):
         self._suche_button_entsperren()
         if treffer is None:
-            self.setze_status("Kein Index vorhanden. Bitte zuerst Index aktualisieren.")
+            self.setze_status(t("search.status_no_index"))
             self.aktuelle_treffer = []
+            self.aktuelle_such_woerter = []
             self.zeige_aktuelle_ergebnisse()
             return
         self.aktuelle_treffer = treffer
+        # Suchwoerter merken - die Trefferkarten faerben sie im
+        # Textausschnitt ein (siehe zeige_aktuelle_ergebnisse).
+        self.aktuelle_such_woerter = smart_search.anfrage_woerter(anfrage)
         self.zeige_aktuelle_ergebnisse()
+        if treffer:
+            self._rueckmeldung_zaehlen()
 
     def _null_treffer_hinweis(self, anfrage):
         """Ermittelt eine hilfreiche, konkrete Erklärung dafür, warum eine
@@ -1255,24 +2382,16 @@ class SmartSearchNotchWindow(ctk.CTk):
         das dem Nutzer keinen Ansatzpunkt gibt, was er ändern könnte."""
         ordner_liste = smart_search.lade_config().get("ordner", [])
         if not ordner_liste:
-            return "📁 Noch kein Ordner hinzugefügt.\n\nKlicke auf 'Ordner hinzufügen' in der Seitenleiste, um loszulegen."
+            return t("results.none_no_folder")
 
         aktive_filter = self.ausgeschlossene_typen()
         if aktive_filter:
-            return (
-                f"🔍 Keine Treffer für „{anfrage}“ mit den aktuellen Filtern.\n\n"
-                "Versuch, oben ein paar Dateityp-Filter (PDF, Word, ...) zu deaktivieren -\n"
-                "vielleicht ist die passende Datei von einem ausgeschlossenen Typ."
-            )
+            return t("results.none_filtered", anfrage=anfrage)
 
         if not os.path.exists(smart_search.INDEX_FILE):
-            return "⏳ Es wurde noch nie indexiert.\n\nKlicke auf 'Index aktualisieren', bevor du suchst."
+            return t("results.none_never_indexed")
 
-        return (
-            f"🔍 Keine Treffer für „{anfrage}“.\n\n"
-            "Mögliche Gründe: Die Datei liegt in keinem überwachten Ordner,\n"
-            "wurde noch nicht indexiert, oder ein anderer Suchbegriff passt besser."
-        )
+        return t("results.none_generic", anfrage=anfrage)
 
     def zeige_aktuelle_ergebnisse(self):
         for w in self.cards_scrollframe.winfo_children():
@@ -1288,14 +2407,14 @@ class SmartSearchNotchWindow(ctk.CTk):
                 self.cards_scrollframe, text=hinweis, font=("Helvetica", 12),
                 text_color="#78909c", justify="center", wraplength=600
             ).pack(pady=40, padx=20)
-            self.setze_status("Keine Treffer.")
+            self.setze_status(t("search.status_no_results"))
             return
 
         for score, eintrag in self.aktuelle_treffer:
             pfad = eintrag["datei"]
             name = os.path.basename(pfad)
             ext = os.path.splitext(name)[1].lower()
-            bg_col, fg_col = BADGE_FARBEN.get(ext, ("#37474f", "#ffffff"))
+            bg_col, fg_col = BADGE_FARBEN.get(ext, farben.BADGE_RUECKFALL)
 
             card = ctk.CTkFrame(self.cards_scrollframe, corner_radius=8)
             card.pack(fill="x", padx=2, pady=3)
@@ -1307,16 +2426,19 @@ class SmartSearchNotchWindow(ctk.CTk):
             lbl_badge = ctk.CTkLabel(zeile_oben, text=f" {ext.replace('.','').upper()} ", font=("Helvetica", 9, "bold"), fg_color=bg_col, text_color=fg_col, corner_radius=4)
             lbl_badge.pack(side="left", padx=8, pady=8)
 
-            lbl_titel = ctk.CTkLabel(zeile_oben, text=f"[{score:.2f}] {name}", font=("Helvetica", 11, "bold"), text_color="#1f77b4")
+            lbl_titel = ctk.CTkLabel(zeile_oben, text=f"[{score:.2f}] {self._kuerze_dateiname(name)}", font=("Helvetica", 11, "bold"), text_color=farben.DATEINAME)
             lbl_titel.pack(side="left", padx=4)
 
-            btn_sim = ctk.CTkButton(zeile_oben, text="🔗 Ähnliche", width=65, height=20, font=("Helvetica", 9), fg_color="#37474f", command=lambda p=pfad: self.aehnliche_suchen(p))
+            btn_sim = ctk.CTkButton(zeile_oben, text=t("card.similar"), width=65, height=20, font=("Helvetica", 9), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda p=pfad: self.aehnliche_suchen(p))
             btn_sim.pack(side="right", padx=2)
 
-            btn_ql = ctk.CTkButton(zeile_oben, text="👁 Vorschau", width=65, height=20, font=("Helvetica", 9), fg_color="#37474f", command=lambda p=pfad: self.quicklook_im_vordergrund(p))
+            btn_ql = ctk.CTkButton(zeile_oben, text=t("card.preview"), width=65, height=20, font=("Helvetica", 9), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda p=pfad: self.quicklook_im_vordergrund(p))
             btn_ql.pack(side="right", padx=2)
 
-            btn_open = ctk.CTkButton(zeile_oben, text="Öffnen", width=50, height=20, font=("Helvetica", 9), command=lambda p=pfad: self.datei_oeffnen_im_vordergrund(p))
+            btn_finder = ctk.CTkButton(zeile_oben, text=t("card.finder"), width=55, height=20, font=("Helvetica", 9), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda p=pfad: self.im_finder_zeigen_im_vordergrund(p))
+            btn_finder.pack(side="right", padx=2)
+
+            btn_open = ctk.CTkButton(zeile_oben, text=t("card.open"), width=50, height=20, font=("Helvetica", 9), command=lambda p=pfad: self.datei_oeffnen_im_vordergrund(p))
             btn_open.pack(side="right", padx=4)
 
             ist_favorit = pfad in self.favoriten
@@ -1332,15 +2454,46 @@ class SmartSearchNotchWindow(ctk.CTk):
             # Untere Zeile: kurzer Textausschnitt aus dem getroffenen
             # Abschnitt, damit man sieht WARUM die Datei getroffen hat,
             # statt nur den nackten Score zu sehen.
-            ausschnitt = (eintrag.get("text") or "").strip().replace("\n", " ")
+            # Der Ausschnitt wird um die Fundstelle herum gewaehlt und die
+            # Suchwoerter darin eingefaerbt. Ein einfaches Label kann keinen
+            # Text teilweise faerben - deshalb ein Textfeld, das wie ein
+            # Label aussieht: ohne Rahmen, ohne Rollbalken, nicht editierbar.
+            ausschnitt, stellen = smart_search.ausschnitt_mit_fundstellen(
+                eintrag.get("text"), self.aktuelle_such_woerter)
             if ausschnitt:
-                if len(ausschnitt) > 180:
-                    ausschnitt = ausschnitt[:180].rsplit(" ", 1)[0] + "..."
-                lbl_ausschnitt = ctk.CTkLabel(
-                    card, text=f"„{ausschnitt}“", font=("Helvetica", 10), text_color="#90a4ae",
-                    anchor="w", justify="left", wraplength=680
+                txt_ausschnitt = ctk.CTkTextbox(
+                    card, height=46, font=("Helvetica", 10),
+                    fg_color="transparent", border_width=0, wrap="word",
+                    activate_scrollbars=False, text_color="#90a4ae"
                 )
-                lbl_ausschnitt.pack(fill="x", padx=12, pady=(2, 8), anchor="w")
+                txt_ausschnitt.pack(fill="x", padx=8, pady=(0, 6))
+                txt_ausschnitt.insert("1.0", "„" + ausschnitt + "“")
+
+                try:
+                    txt_ausschnitt.tag_config(
+                        "fundstelle", background=farben.FUND_HINTERGRUND,
+                        foreground=farben.FUND_TEXT)
+                    for start_, ende_ in stellen:
+                        # +1 wegen des vorangestellten Anfuehrungszeichens.
+                        txt_ausschnitt.tag_add(
+                            "fundstelle", f"1.{start_ + 1}", f"1.{ende_ + 1}")
+                except Exception as e:
+                    # Aeltere CustomTkinter-Fassungen reichen die Tag-Aufrufe
+                    # nicht weiter. Dann bleibt der Text eben ungefaerbt -
+                    # lesbar ist er trotzdem.
+                    print(f"[Hinweis] Fundstellen nicht hervorhebbar: {e}")
+
+                txt_ausschnitt.configure(state="disabled")
+                # Immer am Anfang stehen bleiben und keine Rollereignisse
+                # abfangen - sonst scrollt beim Suchen die Trefferliste weg.
+                try:
+                    txt_ausschnitt.yview_moveto(0)
+                    inneres = txt_ausschnitt._textbox
+                    inneres.configure(takefocus=False, cursor="arrow")
+                    for ereignis in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                        inneres.bind(ereignis, self._rollen_weiterreichen)
+                except Exception:
+                    pass
             else:
                 # Kein Textausschnitt vorhanden (z.B. bei Favoriten-Ansicht,
                 # wo teils nur Metadaten ohne Chunk-Text vorliegen).
@@ -1348,31 +2501,189 @@ class SmartSearchNotchWindow(ctk.CTk):
 
             self.card_widgets.append((card, pfad))
 
-        self.setze_status(f"{len(self.aktuelle_treffer)} Treffer geladen.")
+        self.setze_status(t("search.status_results_loaded", anzahl=len(self.aktuelle_treffer)))
 
 
-# ================= MACOS STATUSLEISTEN-ICON =================
-class MacStatusBarHandler(NSObject):
-    def initWithWindow_(self, app_window):
-        self = objc.super(MacStatusBarHandler, self).init()
-        if self:
-            self.app_window = app_window
-            self.status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
+def _selbsttest():
+    """Prueft im fertigen Bundle, ob sich alle noetigen Bausteine
+    tatsaechlich importieren lassen, und beendet sich dann wieder.
 
-            button = self.status_item.button()
-            button.setTitle_("🔍")
-            button.setTarget_(self)
-            button.setAction_("onClick:")
-        return self
+    Der Anlass: eine ausgelieferte Fassung startete einwandfrei, scheiterte
+    aber auf einem frisch aufgesetzten Mac beim Laden des Suchmodells an
+    einem fehlenden Modul ('torchgen'). Die bisherige Pruefung suchte nur
+    nach Zeichenketten im Archiv - das faellt bei einem Paket, das
+    zusaetzliche Datendateien braucht, nicht auf. Hier wird stattdessen
+    wirklich importiert, in genau der Umgebung, die spaeter auch beim
+    Nutzer laeuft.
+    """
+    pflicht = [
+        "torch", "torchgen", "sentence_transformers", "transformers",
+        "numpy", "customtkinter",
+    ]
+    optional = {
+        "pdfplumber": "PDF (Haupterkennung)",
+        "pypdf": "PDF (Ausweichweg)",
+        "docx": "Word",
+        "openpyxl": "Excel",
+        "pptx": "PowerPoint",
+        "pypdfium2": "Seiten fuer Texterkennung",
+        "Vision": "Texterkennung",
+        "watchdog": "Automatische Aktualisierung",
+        "langchain_text_splitters": "Aufteilung in Abschnitte",
+    }
 
-    def onClick_(self, sender):
-        self.app_window.toggle_requested = True
+    import importlib
+    fehler = 0
+
+    print("Zwingend erforderlich:")
+    for name in pflicht:
+        try:
+            importlib.import_module(name)
+            print(f"  ok      {name}")
+        except Exception as e:
+            print(f"  FEHLT   {name}: {e}")
+            fehler += 1
+
+    print("\nJe Dateiformat:")
+    for name, zweck in optional.items():
+        try:
+            importlib.import_module(name)
+            print(f"  ok      {name:26s} {zweck}")
+        except Exception as e:
+            print(f"  FEHLT   {name:26s} {zweck}  ({e})")
+            fehler += 1
+
+    # Der eigentliche Stolperstein lag nicht im Import von torch, sondern
+    # im Aufbau eines Modells. Deshalb hier zusaetzlich der Weg, den auch
+    # die Anwendung geht - ohne Netzzugriff, es geht nur um die Module.
+    print("\nModellklasse:")
+    try:
+        from sentence_transformers import SentenceTransformer  # noqa: F401
+        from transformers import AutoTokenizer  # noqa: F401
+        print("  ok      Modell- und Tokenizer-Klassen ladbar")
+    except Exception as e:
+        print(f"  FEHLT   {e}")
+        fehler += 1
+
+    print()
+    if fehler:
+        print(f"Ergebnis: {fehler} Baustein(e) fehlen. Das Bundle ist unbrauchbar.")
+    else:
+        print("Ergebnis: vollstaendig.")
+    sys.exit(1 if fehler else 0)
+
+
+SPERRDATEI = os.path.join(DATEN_ORDNER, "laeuft.pid")
+
+# Wird von einer zweiten, gerade gestarteten Kopie angelegt und von der
+# bereits laufenden Kopie in check_toggle_loop() ausgewertet.
+ZEIGEN_SIGNAL = os.path.join(DATEN_ORDNER, "fenster_zeigen.signal")
+
+
+def _bitte_fenster_zeigen():
+    """Der laufenden Instanz mitteilen, dass sie sich zeigen soll."""
+    try:
+        os.makedirs(DATEN_ORDNER, exist_ok=True)
+        with open(ZEIGEN_SIGNAL, "w") as f:
+            f.write("zeigen")
+    except Exception as e:
+        print(f"[Start] Signal an laufende Instanz fehlgeschlagen: {e}")
+
+
+def _bereits_offene_instanz_aktivieren():
+    """Sorgt dafuer, dass SmartSearch hoechstens einmal laeuft.
+
+    Warum das noetig ist: Auf einem Mac koennen problemlos zwei Kopien
+    derselben Anwendung gleichzeitig laufen - eine aus dem
+    Programme-Ordner, eine aus einem Bau- oder Testordner. Beide heissen
+    SmartSearch, beide legen ein Symbol in der Menueleiste an, und beide
+    greifen auf denselben Index zu. Fuer den Benutzer sieht das aus, als
+    haette sich das Programm von selbst ein zweites Mal geoeffnet.
+
+    Ist bereits eine Instanz da, wird sie nach vorne geholt und diese hier
+    beendet sich sofort - dasselbe Verhalten, das man von jeder anderen
+    Mac-Anwendung kennt.
+
+    Rueckgabe: True, wenn sich dieser Start beenden soll.
+    """
+    # 1. Der saubere Weg ueber das Betriebssystem: macOS fuehrt Buch
+    #    darueber, welche Anwendungen mit welcher Bundle-Kennung laufen.
+    #    Das erfasst auch eine zweite Kopie an einem anderen Ort.
+    if system_ui:
+        # Reihenfolge wichtig: erst das Signal legen, dann die laufende
+        # Kopie nach vorne holen - so ist ihr Fenster schon auf dem Weg,
+        # wenn sie aktiviert wird (siehe _bitte_fenster_zeigen).
+        _bitte_fenster_zeigen()
+        if system_ui.laufende_instanz_aktivieren():
+            print("[Start] SmartSearch laeuft bereits - vorhandenes Fenster geholt.")
+            return True
+        # Es lief doch keine zweite Kopie: das eben gelegte Signal wieder
+        # wegraeumen, damit sich dieses Fenster nicht gleich beim eigenen
+        # Start selbst "von aussen" anstupst.
+        try:
+            if os.path.exists(ZEIGEN_SIGNAL):
+                os.remove(ZEIGEN_SIGNAL)
+        except Exception:
+            pass
+
+    # 2. Ausweichweg fuer den Fall, dass die Anwendung ohne Bundle
+    #    gestartet wurde (direkt ueber die Programmdatei oder als
+    #    "python3 gui.py") - dann kennt macOS keine Bundle-Kennung.
+    try:
+        if os.path.exists(SPERRDATEI):
+            with open(SPERRDATEI) as f:
+                alte_pid = int(f.read().strip() or 0)
+            if alte_pid and alte_pid != os.getpid():
+                try:
+                    os.kill(alte_pid, 0)   # nur pruefen, nichts senden
+                except OSError:
+                    pass                   # Eintrag ist verwaist
+                else:
+                    _bitte_fenster_zeigen()
+                    print(f"[Start] SmartSearch laeuft bereits (Prozess {alte_pid}).")
+                    return True
+        os.makedirs(os.path.dirname(SPERRDATEI), exist_ok=True)
+        with open(SPERRDATEI, "w") as f:
+            f.write(str(os.getpid()))
+        import atexit
+        atexit.register(lambda: os.path.exists(SPERRDATEI) and os.remove(SPERRDATEI))
+    except Exception as e:
+        # Eine fehlgeschlagene Pruefung darf den Start nie verhindern.
+        print(f"[Start] Sperrdatei konnte nicht angelegt werden: {e}")
+
+    return False
 
 
 if __name__ == "__main__":
-    app_window = SmartSearchNotchWindow()
-    status_handler = MacStatusBarHandler.alloc().initWithWindow_(app_window)
+    if "--selbsttest" in sys.argv:
+        _selbsttest()
 
-    NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+    if _bereits_offene_instanz_aktivieren():
+        sys.exit(0)
+
+    app_window = SmartSearchNotchWindow()
+
+    programm_ordner = os.path.dirname(os.path.abspath(__file__))
+
+    if system_ui:
+        # Symbol in der Menueleiste (Mac) bzw. im Infobereich (Windows).
+        # Das Ergebnis MUSS in einer Variablen bleiben, sonst raeumt Python
+        # das Objekt weg und das Symbol verschwindet wieder.
+        status_handler = system_ui.menueleisten_symbol_anlegen(
+            lambda: setattr(app_window, "toggle_requested", True),
+            beenden_callback=lambda: setattr(app_window, "beenden_requested", True),
+            icon_pfad=os.path.join(programm_ordner, "icon.png"),
+        )
+        system_ui.als_programm_im_dock_anmelden()
+        system_ui.dock_symbol_setzen(os.path.join(programm_ordner, "icon.png"))
+
+    if plattform.IST_WINDOWS:
+        # Fenster- und Taskleistensymbol setzt unter Windows Tkinter selbst,
+        # dafuer braucht es die .ico-Datei (.png versteht Windows an dieser
+        # Stelle nicht).
+        try:
+            app_window.iconbitmap(os.path.join(programm_ordner, "icon.ico"))
+        except Exception as e:
+            print(f"[Icon] Fenstersymbol konnte nicht gesetzt werden: {e}")
 
     app_window.mainloop()

@@ -61,6 +61,21 @@ MODELL_NAME = "BAAI/bge-m3"
 # geprueft. Passt etwas nicht, wird der Index verworfen und neu gebaut.
 INDEX_FORMAT = 2
 
+# Modellname und Formatstand stehen NEBEN der Indexdatei, nicht darin.
+#
+# Fassung 1.0.3 hatte sie in die index.pkl selbst geschrieben, als
+# Woerterbuch statt als Liste. Das ging in eine Richtung gut und in die
+# andere schief: eine aeltere Fassung liest die Datei weiterhin als Liste,
+# laeuft dann ueber die Schluessel des Woerterbuchs und stuerzt beim Start
+# ab. Ein Update, nach dem die vorherige Fassung nicht mehr startet, ist
+# keine Option - schon gar nicht, wenn man zurueckrollen koennen muss.
+#
+# Deshalb bleibt index.pkl eine reine Liste, wie sie es immer war, und die
+# Angaben wandern in eine kleine Datei daneben. Aeltere Fassungen sehen sie
+# nicht und arbeiten wie gewohnt; neuere lesen sie und wissen Bescheid.
+# Fehlt sie, gilt der Index als unbekannt und wird einmal neu gebaut.
+INDEX_META_FILE = INDEX_FILE + ".meta.json"
+
 # Score-Schwelle für suche_intern(): Treffer unterhalb dieses kombinierten
 # Semantik+Keyword-Scores werden verworfen. Empirisch ermittelt (v3.x):
 # alles darunter waren in Tests fast immer thematisch irrelevante Treffer.
@@ -465,6 +480,33 @@ def in_abschnitte_teilen(text, groesse=ABSCHNITT_GROESSE, ueberlappung=ABSCHNITT
 _index_verworfen = False
 
 
+def _meta_lesen():
+    """Die Angaben neben dem Index - leer, wenn es sie nicht gibt."""
+    try:
+        with open(INDEX_META_FILE, encoding="utf-8") as f:
+            inhalt = json.load(f)
+        return inhalt if isinstance(inhalt, dict) else {}
+    except Exception:
+        return {}
+
+
+def _meta_schreiben():
+    """Schreibt Modellname und Formatstand neben den Index.
+
+    Wird NACH der Indexdatei geschrieben. Geht dabei etwas schief, gilt der
+    Index beim naechsten Start als unbekannt und wird neu gebaut - der
+    Fehler kostet also Rechenzeit, aber er kann keine falschen Treffer
+    erzeugen. Andersherum waere es gefaehrlich.
+    """
+    try:
+        temp_pfad = INDEX_META_FILE + ".tmp"
+        with open(temp_pfad, "w", encoding="utf-8") as f:
+            json.dump({"format": INDEX_FORMAT, "modell": MODELL_NAME}, f)
+        os.replace(temp_pfad, INDEX_META_FILE)
+    except Exception as e:
+        print(f"[Index] Begleitdatei nicht schreibbar: {e}")
+
+
 def _index_datei_lesen():
     """Liest index.pkl und gibt (eintraege, passend) zurueck.
 
@@ -475,14 +517,19 @@ def _index_datei_lesen():
     with open(INDEX_FILE, "rb") as f:
         inhalt = pickle.load(f)
 
+    # Uebergangsfall: Fassung 1.0.3 hat die Angaben in die Datei selbst
+    # geschrieben. Solche Indexdateien bleiben lesbar, damit niemand ohne
+    # Grund neu indexieren muss.
     if isinstance(inhalt, dict) and "eintraege" in inhalt:
         passend = (inhalt.get("format") == INDEX_FORMAT
                    and inhalt.get("modell") == MODELL_NAME)
         return inhalt.get("eintraege") or [], passend
 
-    # Format 1: eine nackte Liste ohne jede Angabe zum Modell. Womit sie
-    # gebaut wurde, ist nicht mehr feststellbar - also nicht verwendbar.
-    return (inhalt if isinstance(inhalt, list) else []), False
+    eintraege = inhalt if isinstance(inhalt, list) else []
+    meta = _meta_lesen()
+    passend = (meta.get("format") == INDEX_FORMAT
+               and meta.get("modell") == MODELL_NAME)
+    return eintraege, passend
 
 
 def index_ist_fremd():
@@ -538,17 +585,13 @@ def speichere_index(eintraege):
     """
     global _index_verworfen
 
-    # Modellname und Formatstand wandern mit in die Datei - siehe
-    # INDEX_FORMAT oben.
-    inhalt = {
-        "format": INDEX_FORMAT,
-        "modell": MODELL_NAME,
-        "eintraege": eintraege,
-    }
     temp_pfad = INDEX_FILE + ".tmp"
     with open(temp_pfad, "wb") as f:
-        pickle.dump(inhalt, f)
+        pickle.dump(eintraege, f)
     os.replace(temp_pfad, INDEX_FILE)
+
+    # Erst danach die Angaben daneben - siehe INDEX_META_FILE oben.
+    _meta_schreiben()
     _index_verworfen = False
 
 

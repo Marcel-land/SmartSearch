@@ -1,0 +1,38 @@
+# Pakete, die SmartSearch unter Windows braucht.
+# Installation in der Windows-VM:
+#     py -m pip install -r requirements-windows.txt
+#
+# Auf dem Mac wird diese Datei NICHT gebraucht - dort kommen zusaetzlich
+# die pyobjc-Pakete dazu, die es unter Windows gar nicht gibt.
+
+# --- Oberflaeche ---
+customtkinter
+pystray            # Symbol im Infobereich (neben der Uhr)
+pillow             # wird von pystray fuer das Symbolbild gebraucht
+
+# --- Suche / KI ---
+sentence-transformers
+torch
+numpy
+
+# --- Dateien lesen ---
+pypdf
+pdfplumber
+python-docx
+openpyxl
+python-pptx
+
+# --- Ordnerueberwachung ---
+watchdog
+
+# --- Texterkennung fuer gescannte PDFs (optional) ---
+# Auf dem Mac uebernimmt das Apples Vision-Framework. Unter Windows
+# braucht es Tesseract, und zwar ZUSAETZLICH als Programm:
+#     https://github.com/UB-Mannheim/tesseract/wiki
+# Ohne Tesseract laeuft alles andere normal weiter, nur gescannte PDFs
+# ohne Textebene bleiben dann unlesbar.
+pypdfium2
+pytesseract
+
+# --- Bauen der .exe ---
+pyinstaller

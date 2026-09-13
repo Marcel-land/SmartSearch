@@ -57,8 +57,9 @@ python3 search.py index ~/Documents
 ```
 
 Beim ersten Mal wird zusätzlich einmalig ein KI-Modell heruntergeladen
-(ca. 80 MB, dauert 1-2 Minuten). Danach siehst du, wie die Dateien
-eingelesen werden.
+(ca. 2,3 GB, dauert je nach Internetverbindung mehrere Minuten). Danach
+läuft alles auch offline, und du siehst, wie die Dateien eingelesen
+werden.
 
 ## Schritt 6: Suchen!
 

@@ -25,16 +25,19 @@ import time
 import datetime
 import subprocess
 import re
+import socket
 import threading
 import math
-import urllib.request
-import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-INDEX_FILE = os.path.join(os.path.dirname(__file__), "index.pkl")
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
-FAVORITEN_FILE = os.path.join(os.path.dirname(__file__), "favoriten.json")
-LIZENZ_FILE = os.path.join(os.path.dirname(__file__), "lizenz.json")
+# Nutzerdaten liegen NICHT mehr neben dem Programmcode, sondern in
+# ~/Library/Application Support/SmartSearch - siehe pfade.py fuer die
+# ausfuehrliche Begruendung (Updates, Signierung, Schreibrechte).
+from pfade import INDEX_FILE, CONFIG_FILE, FAVORITEN_FILE  # noqa: F401
+
+# Texterkennung fuer gescannte PDFs - laeuft ueber Apples Vision-Framework
+# statt ueber extern zu installierendes Tesseract/poppler, siehe ocr.py.
+import ocr
 
 UNTERSTUETZT = (".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx")
 
@@ -51,17 +54,38 @@ MODELL_NAME = "BAAI/bge-m3"
 # alles darunter waren in Tests fast immer thematisch irrelevante Treffer.
 SCORE_SCHWELLE = 0.15
 
-# Maximale Seitenzahl, die bei einem gescannten PDF per OCR gelesen wird.
-# Vorher fest auf 5 begrenzt - dadurch wurden längere Scans (Verträge,
-# Berichte) nach Seite 5 stillschweigend nicht mehr durchsucht.
-OCR_MAX_SEITEN = 30
+# BGE-M3 liefert selbst fuer voellig unverwandte Texte noch Werte um 0.6.
+# Die absolute Schwelle oben greift daher praktisch nie, und bei einer
+# Anfrage, zu der es nichts Passendes gibt, wurden trotzdem drei beliebige
+# Dokumente angezeigt. Zwei zusaetzliche Regeln fangen das ab:
+#
+# 1. Enthaelt ein Dokument KEINES der Suchwoerter woertlich, muss es
+#    semantisch ueberzeugen. Der Wert ist bewusst nicht zu hoch angesetzt:
+#    Ein Dokument zu finden, in dem das gesuchte Wort GAR NICHT vorkommt,
+#    ist der eigentliche Zweck dieser Anwendung - wer "Drucker" sucht, soll
+#    auch die Rechnung finden, auf der "Multifunktionssystem" steht. Eine
+#    strenge Sperre wuerde genau das verhindern.
+SEMANTIK_MINDEST_OHNE_TREFFER = 0.60
 
-# Auflösung (DPI), mit der PDF-Seiten fürs OCR in Bilder umgewandelt
-# werden. pdf2image nutzt standardmäßig 200 DPI - für schwierige Scans
-# (kleine Schrift, Ausweiskopien, schlecht kontrastierte Dokumente) liefert
-# eine höhere Auflösung Tesseract deutlich mehr erkennbare Details. Höher
-# = bessere Erkennung, aber langsamer und mehr Arbeitsspeicher pro Seite.
-OCR_DPI = 400
+# Nutzbarer Wertebereich von BGE-M3. Alles unterhalb der Untergrenze ist
+# erfahrungsgemaess thematisch unverwandt, oberhalb der Obergrenze liegen
+# nur noch nahezu identische Texte. Auf diesen Bereich wird der rohe
+# Aehnlichkeitswert gespreizt, bevor er mit der Stichwortwertung
+# verrechnet wird.
+SEMANTIK_UNTERGRENZE = 0.42
+SEMANTIK_OBERGRENZE = 0.82
+
+# Verhaeltnis von inhaltlicher zu woertlicher Uebereinstimmung. Die
+# Stichwortwertung wiegt bewusst schwer: wer "Rechnung" eintippt und ein
+# Dokument hat dieses Wort woertlich, erwartet es weit oben - unabhaengig
+# davon, wie aehnlich das Modell andere Dokumente findet.
+GEWICHT_SEMANTIK = 0.55
+GEWICHT_STICHWORT = 0.45
+#
+# 2. Alles, was klar hinter dem besten Treffer zurueckbleibt, fliegt raus.
+#    Selbstjustierend: bei einer guten Anfrage bleiben mehrere Treffer
+#    stehen, bei einer schlechten nur der beste - oder gar keiner.
+RELATIVER_ABSTAND = 0.75
 
 # Ordnernamen, die NIE mitindexiert werden sollen, egal wo sie im
 # durchsuchten Ordnerbaum auftauchen. Das sind App-eigene/Bibliotheks-
@@ -111,6 +135,15 @@ def befehl_ordner_entfernen(ordner):
     config["ordner"].remove(ordner)
     speichere_config(config)
 
+    # WICHTIG: Ein entfernter Ordner muss auch aus dem Index verschwinden.
+    # Vorher wurde nur die config.json angepasst - die bereits berechneten
+    # Eintraege blieben in index.pkl liegen und tauchten weiter in den
+    # Suchergebnissen auf. Genau das war der Fehler "ich finde Dateien aus
+    # einem Ordner, den ich laengst entfernt habe".
+    entfernt = entferne_ordner_aus_index(ordner)
+    if entfernt:
+        print(f"[Index] {entfernt} Eintraege aus '{ordner}' entfernt.")
+
 
 # ---------- FAVORITEN ----------
 
@@ -150,156 +183,142 @@ def favorit_umschalten(pfad):
     return ist_favorit
 
 
-# ---------- ABO (Grundgerüst fürs geplante Abomodell) ----------
-#
-# Modell (nach Rücksprache mit Marcel): Die Basis-Version ist dauerhaft
-# kostenlos, KEIN Trial. Ein aktives Abo schaltet nur die Pro-Funktionen
-# frei (OCR, Office-Formate). Verifiziert wird über die hinterlegte
-# E-Mail-Adresse, die App fragt periodisch beim (künftigen) Zahlungs-
-# anbieter den aktuellen Abo-Status ab - erkennt so auch, wenn ein Abo
-# gekündigt/abgelaufen ist, statt einmal freigeschaltet für immer zu
-# gelten.
-#
-# WICHTIG: ABO_STATUS_URL ist noch ein Platzhalter (siehe Konstante).
-# Zahlungsanbieter (Paddle/Lemon Squeezy/Stripe/...) steht laut Marcel noch
-# nicht fest - sobald er sich entschieden hat, muss abo_status_online_pruefen()
-# den echten API-Endpunkt des Anbieters ansprechen (typischerweise: E-Mail
-# oder Kunden-ID rein, aktueller Abo-Status raus). Bis dahin schlägt die
-# Online-Prüfung immer fehl (kein Absturz, Pro bleibt einfach inaktiv).
-
-ABO_STATUS_URL = "https://example.com/smartsearch/abo-status"
-
-# Wie lange ein zuletzt erfolgreich als "aktiv" geprüfter Abo-Status auch
-# OHNE Internetverbindung weiter gilt (Offline-Kulanz) - sonst würde jeder
-# kurze Internetausfall zahlende Nutzer sofort auf die Basis-Version
-# zurückwerfen.
-ABO_OFFLINE_KULANZ_TAGE = 3
+# Ungefaehre Groesse des BGE-M3-Modells auf der Festplatte. Dient NUR
+# der Fortschrittsanzeige beim einmaligen Download - ein paar Prozent
+# Abweichung sind egal, Hauptsache der Nutzer sieht, dass sich etwas tut.
+MODELL_GROESSE_BYTES = 2_270_000_000
 
 
-def lade_abo():
-    """Lädt den lokal zwischengespeicherten Abo-Status."""
-    if os.path.exists(LIZENZ_FILE):
-        try:
-            with open(LIZENZ_FILE, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[Warnung] Abo-Datei konnte nicht gelesen werden: {e}")
-    return {"email": None, "aktiv": False, "zuletzt_geprueft": None}
+class ModellDownloadFehler(Exception):
+    """Das Modell liegt noch nicht lokal vor und konnte nicht geladen
+    werden - in aller Regel, weil beim allerersten Start keine
+    Internetverbindung besteht. Eigene Klasse, damit die GUI diesen einen
+    Fall verstaendlich erklaeren kann, statt einen rohen Netzwerkfehler
+    anzuzeigen."""
 
 
-def speichere_abo(abo):
-    try:
-        with open(LIZENZ_FILE, "w") as f:
-            json.dump(abo, f, indent=2)
-    except Exception as e:
-        print(f"[Warnung] Abo-Status konnte nicht gespeichert werden: {e}")
+class ProgrammUnvollstaendig(Exception):
+    """Ein Baustein fehlt in der ausgelieferten App - nicht das Modell,
+    sondern ein Programmteil, der beim Bauen haette mitkopiert werden
+    muessen. Der Nutzer kann daran nichts aendern; ein Neuversuch oder
+    eine bessere Internetverbindung helfen nicht. Eigene Klasse, damit
+    die Oberflaeche das sagt, statt faelschlich auf die Verbindung zu
+    zeigen."""
 
 
-def abo_email_setzen(email):
-    """Hinterlegt die Konto-E-Mail lokal (noch ohne Prüfung - dafür
-    abo_status_online_pruefen() separat aufrufen, üblicherweise im
-    Hintergrund-Thread der GUI, da das ein Netzwerk-Request ist)."""
-    abo = lade_abo()
-    abo["email"] = (email or "").strip()
-    speichere_abo(abo)
+def _modell_cache_ordner():
+    """Ordner, in dem huggingface das Modell ablegt. HF_HOME hat Vorrang,
+    falls jemand den Cache verschoben hat."""
+    basis = os.environ.get("HF_HOME")
+    if basis:
+        hub = os.path.join(basis, "hub")
+    else:
+        hub = os.path.expanduser("~/.cache/huggingface/hub")
+    return os.path.join(hub, "models--" + MODELL_NAME.replace("/", "--"))
 
 
-def abo_status_online_pruefen():
-    """Fragt beim Zahlungsanbieter den aktuellen Abo-Status für die
-    hinterlegte E-Mail ab und cached das Ergebnis lokal mit Zeitstempel.
-
-    Gibt (erfolgreich, aktiv, fehlermeldung) zurück:
-    - erfolgreich=False -> Anfrage ist fehlgeschlagen (kein Internet, Server
-      noch nicht eingerichtet, ...); 'aktiv' ist dann der zuletzt bekannte
-      gecachte Stand, NICHT neu geprüft.
-    - erfolgreich=True -> 'aktiv' ist der frisch vom Server bestätigte Stand.
-    """
-    abo = lade_abo()
-    email = abo.get("email")
-    if not email:
-        return False, False, "Keine E-Mail-Adresse hinterlegt."
-
-    try:
-        url = f"{ABO_STATUS_URL}?email={urllib.parse.quote(email)}"
-        with urllib.request.urlopen(url, timeout=8) as antwort:
-            daten = json.loads(antwort.read().decode("utf-8"))
-        aktiv = bool(daten.get("aktiv", False))
-        abo["aktiv"] = aktiv
-        abo["zuletzt_geprueft"] = time.time()
-        speichere_abo(abo)
-        return True, aktiv, None
-    except Exception as e:
-        return False, abo.get("aktiv", False), str(e)
+def _ordnergroesse(pfad):
+    gesamt = 0
+    for wurzel, _, dateien in os.walk(pfad):
+        for name in dateien:
+            try:
+                # Symlinks nicht mitzaehlen: huggingface verlinkt die
+                # Snapshot-Dateien auf den blobs-Ordner, sonst waere jede
+                # Datei doppelt in der Summe.
+                voll = os.path.join(wurzel, name)
+                if not os.path.islink(voll):
+                    gesamt += os.path.getsize(voll)
+            except OSError:
+                pass
+    return gesamt
 
 
-def ist_pro_aktiv():
-    """Schneller LOKALER Check ohne Netzwerk (für den UI-Start) - nutzt den
-    zuletzt geprüften Status, solange er nicht älter als
-    ABO_OFFLINE_KULANZ_TAGE ist. Danach gilt Pro als inaktiv, bis eine neue
-    Online-Prüfung wieder 'aktiv' bestätigt (siehe
-    abo_status_online_pruefen)."""
-    abo = lade_abo()
-    if not abo.get("aktiv"):
+def modell_ist_vorhanden():
+    """True, wenn das Modell vollstaendig genug lokal liegt, um ohne
+    Internet zu starten. Die Groessenschwelle faengt einen frueher
+    abgebrochenen Download ab - ein halb geladener Ordner existiert zwar,
+    taugt aber nicht."""
+    ordner = _modell_cache_ordner()
+    if not os.path.isdir(ordner):
         return False
-    zuletzt = abo.get("zuletzt_geprueft")
-    if not zuletzt:
+    return _ordnergroesse(ordner) > MODELL_GROESSE_BYTES * 0.9
+
+
+def _internet_erreichbar(timeout=5):
+    try:
+        with socket.create_connection(("huggingface.co", 443), timeout=timeout):
+            return True
+    except OSError:
         return False
-    tage_her = (time.time() - zuletzt) / 86400
-    return tage_her <= ABO_OFFLINE_KULANZ_TAGE
 
 
-def lade_modell():
-    """Lädt das BGE-M3 KI-Modell.
+def lade_modell(fortschritt_fn=None):
+    """Laedt das BGE-M3 KI-Modell.
 
-    WICHTIG: Läuft bewusst auf der CPU statt auf MPS (Apples GPU-Backend).
+    WICHTIG: Laeuft bewusst auf der CPU statt auf MPS (Apples GPU-Backend).
     PyTorchs MPS-Speicherverwalter hat einen bekannten Bug, der bei
-    längeren Indexierungsläufen mit "buffer_block INTERNAL ASSERT FAILED"
-    abstürzt (die ganze App wird dann vom Betriebssystem beendet - "zsh:
+    laengeren Indexierungslaeufen mit "buffer_block INTERNAL ASSERT FAILED"
+    abstuerzt (die ganze App wird dann vom Betriebssystem beendet - "zsh:
     abort"). Auf der CPU ist die Berechnung etwas langsamer, aber stabil.
+
+    fortschritt_fn(geladene_bytes, gesamt_bytes) wird waehrend des
+    EINMALIGEN Erst-Downloads regelmaessig aufgerufen. Ohne diese Rueckmeldung
+    steht ein neuer Nutzer minutenlang vor einer scheinbar eingefrorenen
+    App - das war die haeufigste Stelle, an der Leute die App wieder
+    geloescht haben, bevor sie sie ueberhaupt einmal benutzt hatten.
+
+    Wirft ModellDownloadFehler, wenn das Modell fehlt und nicht geladen
+    werden kann.
     """
-    print("Lade KI-Modell (BGE-M3, CPU-Modus)...")
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(MODELL_NAME, device="cpu")
+    muss_geladen_werden = not modell_ist_vorhanden()
 
+    if muss_geladen_werden and not _internet_erreichbar():
+        raise ModellDownloadFehler(
+            "Das KI-Modell wurde noch nicht heruntergeladen und es besteht "
+            "keine Internetverbindung."
+        )
 
-def _bild_fuer_ocr_aufbereiten(img):
-    """Bereitet ein Seitenbild vor dem OCR-Durchlauf auf, um Tesseracts
-    Erkennungsrate bei schwierigen Scans (kleine Schrift, wenig Kontrast,
-    z.B. Ausweiskopien) zu verbessern.
+    beobachter_stoppen = threading.Event()
 
-    - Graustufen: Farbinformation lenkt Tesseract eher ab, als dass sie
-      hilft, und macht die Verarbeitung zusätzlich langsamer.
-    - Kontrastverstärkung: hebt blasse/schwach gedruckte Zeichen deutlicher
-      vom Hintergrund ab.
-    """
-    from PIL import ImageEnhance
-    graustufen = img.convert("L")
-    kontrastverstaerkt = ImageEnhance.Contrast(graustufen).enhance(1.6)
-    return kontrastverstaerkt
+    def _beobachte_download():
+        """Misst waehrend des Downloads einfach die Groesse des Cache-
+        Ordners. Bewusst so simpel gehalten statt ueber die internen
+        Fortschritts-Hooks von huggingface_hub zu gehen - die aendern sich
+        zwischen Versionen, ein Ordner auf der Festplatte nicht."""
+        ordner = _modell_cache_ordner()
+        while not beobachter_stoppen.wait(1.0):
+            try:
+                geladen = _ordnergroesse(ordner) if os.path.isdir(ordner) else 0
+                fortschritt_fn(geladen, MODELL_GROESSE_BYTES)
+            except Exception:
+                pass
 
+    beobachter = None
+    if muss_geladen_werden and fortschritt_fn is not None:
+        beobachter = threading.Thread(target=_beobachte_download, daemon=True)
+        beobachter.start()
 
-def _pdf_ocr_verarbeiten(pfad):
-    """Liest Text von stummen PDFs/Scans per Tesseract-OCR aus.
-
-    Verarbeitet bis zu OCR_MAX_SEITEN Seiten mit OCR_DPI Auflösung, damit
-    auch längere gescannte Dokumente und schwierige Scans (kleine Schrift,
-    schwacher Kontrast) zuverlässig lesbar sind.
-    """
     try:
-        from pdf2image import convert_from_path
-        import pytesseract
-
-        images = convert_from_path(pfad, first_page=1, last_page=OCR_MAX_SEITEN, dpi=OCR_DPI)
-        ocr_text_teile = []
-        for img in images:
-            aufbereitet = _bild_fuer_ocr_aufbereiten(img)
-            text = pytesseract.image_to_string(aufbereitet, lang="deu+eng")
-            if text.strip():
-                ocr_text_teile.append(text)
-        return "\n".join(ocr_text_teile)
+        print("Lade KI-Modell (BGE-M3, CPU-Modus)...")
+        from sentence_transformers import SentenceTransformer
+        return SentenceTransformer(MODELL_NAME, device="cpu")
+    except ImportError as e:
+        # Ein fehlendes Modul ist kein Netzwerkproblem. Frueher landete
+        # dieser Fall in der Sammelbehandlung unten und wurde dem Nutzer
+        # als "keine Internetverbindung" angezeigt - eine Fehlermeldung,
+        # die in die falsche Richtung schickt und nicht loesbar ist.
+        raise ProgrammUnvollstaendig(str(e)) from e
     except Exception as e:
-        print(f"[Warnung] OCR fehlgeschlagen bei {pfad}: {e}")
-        return ""
+        if muss_geladen_werden:
+            # Beim Erst-Download ist ein Fehler fast immer ein Netzwerk-
+            # oder Speicherplatzproblem - als solches weiterreichen, damit
+            # die GUI es erklaeren kann.
+            raise ModellDownloadFehler(str(e)) from e
+        raise
+    finally:
+        beobachter_stoppen.set()
+        if beobachter is not None:
+            beobachter.join(timeout=2)
 
 
 def lies_datei(pfad):
@@ -331,7 +350,7 @@ def lies_datei(pfad):
                     print(f"[Warnung] pypdf-Fallback fehlgeschlagen bei {pfad}: {e}")
 
             if not text or len(text.strip()) < 50:
-                text = _pdf_ocr_verarbeiten(pfad)
+                text = ocr.pdf_text_erkennen(pfad)
 
             return text
         elif ext == ".docx":
@@ -373,12 +392,39 @@ def lies_datei(pfad):
             return "\n".join(text_teile)
         else:
             return None
+    except PermissionError:
+        # Getrennt behandelt: das ist kein defektes Dokument, sondern eine
+        # fehlende Freigabe - dagegen hilft nur die Systemeinstellung.
+        print(f"[Hinweis] Keine Leseberechtigung: {pfad}")
+        return None
     except Exception as e:
         print(f"[Warnung] Datei konnte nicht gelesen werden: {pfad} ({e})")
         return None
 
 
-def in_abschnitte_teilen(text, groesse=700, ueberlappung=150):
+# Groesse der Textabschnitte, die einzeln in einen Bedeutungsvektor
+# umgerechnet werden.
+#
+# Warum klein: Ein Vektor ist im Kern ein Durchschnitt ueber alles, was in
+# seinem Abschnitt steht. Bei 700 Zeichen einer Rechnung landen darin
+# Absender, Empfaenger, Kundennummer, Zahlungsziel, Steuersatz UND die
+# Positionszeile mit dem eigentlichen Artikel. Der Vektor sagt dann nur
+# noch "Geschaeftsbrief mit Zahlen" - die Information, worum es
+# tatsaechlich geht, verschwindet im Mittelwert.
+#
+# Bei rund 350 Zeichen bleibt eine Positionszeile ("1 Stk Kyocera ECOSYS
+# M2540idn Multifunktionssystem s/w") in einem eigenen Abschnitt und
+# behaelt ein eigenes, klares Signal. Das ist der wirksamste einzelne
+# Hebel fuer die inhaltliche Suche in formularartigen Dokumenten -
+# Rechnungen, Lieferscheinen, Vertraegen mit Anlagenverzeichnis.
+#
+# Preis: etwa doppelt so viele Abschnitte, also groesserer Index und
+# laengere erste Indexierung. Das ist es wert.
+ABSCHNITT_GROESSE = 350
+ABSCHNITT_UEBERLAPPUNG = 80
+
+
+def in_abschnitte_teilen(text, groesse=ABSCHNITT_GROESSE, ueberlappung=ABSCHNITT_UEBERLAPPUNG):
     try:
         from langchain_text_splitters import RecursiveCharacterTextSplitter
         splitter = RecursiveCharacterTextSplitter(
@@ -388,13 +434,17 @@ def in_abschnitte_teilen(text, groesse=700, ueberlappung=150):
         )
         return splitter.split_text(text)
     except ImportError:
+        # Notfallweg, falls langchain_text_splitters fehlt: grob nach
+        # Wortzahl teilen. Rund 50 Woerter entsprechen den 350 Zeichen oben.
         woerter = text.split()
-        if len(woerter) <= 100:
+        WOERTER_PRO_ABSCHNITT = 50
+        UEBERLAPPUNG_WOERTER = 12
+        if len(woerter) <= WOERTER_PRO_ABSCHNITT:
             return [" ".join(woerter)]
         abschnitte = []
-        schritt = max(100 - 20, 1)
+        schritt = max(WOERTER_PRO_ABSCHNITT - UEBERLAPPUNG_WOERTER, 1)
         for i in range(0, len(woerter), schritt):
-            abschnitte.append(" ".join(woerter[i:i + 100]))
+            abschnitte.append(" ".join(woerter[i:i + WOERTER_PRO_ABSCHNITT]))
         return abschnitte
 
 
@@ -422,17 +472,78 @@ def speichere_index(eintraege):
     os.replace(temp_pfad, INDEX_FILE)
 
 
+# Punkt 16 der Liste: sehr grosse Dateien. Eine einzelne 500-MB-PDF kann
+# die Indexierung minutenlang blockieren und viel Arbeitsspeicher belegen -
+# fuer ein Dokument, das ohnehin fast nie gesucht wird. Solche Dateien
+# werden uebersprungen und in der Fehlerliste benannt.
+MAX_DATEIGROESSE = 120 * 1024 * 1024  # 120 MB
+
+
+# Ordner, auf die macOS den Zugriff verweigert hat. Wird bei jedem Lauf
+# neu gefuellt und von der GUI ausgelesen, damit der Nutzer erfaehrt,
+# warum ein Ordner leer bleibt (Punkt 5 der Liste).
+verweigerte_ordner = []
+
+
 def dateien_im_ordner(ordner):
     gefunden = []
-    for wurzel, unterordner, dateien in os.walk(ordner):
+    verweigerte_ordner.clear()
+
+    def bei_fehler(fehler):
+        """os.walk meldet Fehler nur ueber diesen Rueckruf - ohne ihn
+        werden sie stillschweigend verschluckt."""
+        if isinstance(fehler, PermissionError):
+            verweigerte_ordner.append(fehler.filename or ordner)
+            print(f"[Hinweis] Kein Zugriff auf {fehler.filename} - "
+                  f"in den Systemeinstellungen unter Datenschutz erlauben.")
+        else:
+            print(f"[Warnung] Ordner nicht lesbar: {fehler}")
+
+    for wurzel, unterordner, dateien in os.walk(ordner, onerror=bei_fehler):
         # Ignorierte Unterordner direkt aus der Traversierung entfernen
         # (verändert die Liste in-place, damit os.walk gar nicht erst
         # hineinschaut - schneller als hinterher zu filtern).
-        unterordner[:] = [u for u in unterordner if u not in IGNORIERTE_ORDNERNAMEN]
+        # Safari legt einen unfertigen Download als PAKET an - einen Ordner
+        # namens "bericht.pdf.download", in dem die halbe Datei liegt.
+        # os.walk lief bisher hinein, fand dort ein angefangenes PDF und
+        # meldete es dauerhaft als "nicht lesbar". Es ist aber schlicht ein
+        # abgebrochener Download, kein Dokument des Nutzers.
+        unterordner[:] = [
+            u for u in unterordner
+            if u not in IGNORIERTE_ORDNERNAMEN and not u.endswith(".download")
+        ]
         for name in dateien:
-            if name.lower().endswith(UNTERSTUETZT):
-                gefunden.append(os.path.join(wurzel, name))
+            # Temporaere Sperrdateien von Word/Excel/PowerPoint ("~$bericht
+            # .docx") und macOS-Ressourcendateien ("._datei.pdf") sind keine
+            # echten Dokumente. Sie liessen sich nie lesen und landeten
+            # deshalb dauerhaft in der Liste der nicht lesbaren Dateien -
+            # eine Warnung, gegen die der Nutzer nichts tun kann.
+            if name.startswith("~$") or name.startswith("._"):
+                continue
+            if not name.lower().endswith(UNTERSTUETZT):
+                continue
+            voller_pfad = os.path.join(wurzel, name)
+            try:
+                groesse = os.path.getsize(voller_pfad)
+                if groesse == 0:
+                    # Leere Datei: kein Fehler, nur nichts zu holen. Wurde
+                    # bisher als "nicht lesbar" gemeldet und beunruhigte
+                    # ohne Anlass.
+                    continue
+                if groesse > MAX_DATEIGROESSE:
+                    print(f"[Hinweis] Uebersprungen, zu gross: {name}")
+                    continue
+            except OSError:
+                # Groesse nicht feststellbar - dann trotzdem versuchen.
+                pass
+            gefunden.append(voller_pfad)
     return gefunden
+
+
+def nicht_zugaengliche_ordner():
+    """Ordner, die beim letzten Lauf wegen fehlender Berechtigung
+    uebersprungen wurden."""
+    return list(dict.fromkeys(verweigerte_ordner))
 
 
 def fehlgeschlagene_dateien():
@@ -644,7 +755,7 @@ _modell_cache = None
 _modell_lock = threading.Lock()
 
 
-def geladenes_modell():
+def geladenes_modell(fortschritt_fn=None):
     """Lädt das Modell einmalig und cached es (Thread-sicher).
 
     Ohne den Lock könnten Suche und Indexierung, wenn sie gleichzeitig zum
@@ -658,7 +769,7 @@ def geladenes_modell():
             if _modell_cache is None:  # Doppelt geprüft: evtl. hat ein
                 # anderer Thread es inzwischen schon geladen, während wir
                 # auf den Lock gewartet haben.
-                _modell_cache = lade_modell()
+                _modell_cache = lade_modell(fortschritt_fn=fortschritt_fn)
     return _modell_cache
 
 
@@ -669,20 +780,213 @@ def anfrage_woerter(anfrage):
 
 def _zeitraum_cutoff(zeitraum):
     """Wandelt eine Zeitraum-Auswahl der GUI in einen Unix-Timestamp um,
-    ab dem eine Datei als 'im Zeitraum' gilt. None = kein Filter."""
-    if not zeitraum or zeitraum == "Alle Zeiten":
+    ab dem eine Datei als 'im Zeitraum' gilt. None = kein Filter.
+
+    Erwartet einen SPRACHUNABHÄNGIGEN Code ("alle"/"7_tage"/"monat"/"jahr"),
+    keinen angezeigten Text - seit es die App auf Deutsch UND Englisch gibt,
+    würde ein Vergleich gegen den sichtbaren Menütext (z.B. "7 Tage") in der
+    englischen Oberfläche ("7 Days") nie mehr treffen. Die GUI übersetzt die
+    Auswahl in gui.py über ZEITRAUM_CODES in einen dieser Codes, bevor sie
+    hier ankommt."""
+    if not zeitraum or zeitraum == "alle":
         return None
 
     heute = datetime.date.today()
-    if zeitraum == "7 Tage":
+    if zeitraum == "7_tage":
         return time.time() - 7 * 86400
-    elif zeitraum == "Dieser Monat":
+    elif zeitraum == "monat":
         start = datetime.date(heute.year, heute.month, 1)
         return time.mktime(start.timetuple())
-    elif zeitraum == "Dieses Jahr":
+    elif zeitraum == "jahr":
         start = datetime.date(heute.year, 1, 1)
         return time.mktime(start.timetuple())
     return None
+
+
+# ------------------------------------------------------------------
+# GUELTIGKEIT VON INDEX-EINTRAEGEN
+#
+# Der Index (index.pkl) ist ein Langzeitspeicher: einmal eingelesene
+# Dateien bleiben dort stehen, bis sie ausdruecklich entfernt werden.
+# Was in der config.json steht, ist dagegen die AKTUELLE Auswahl des
+# Nutzers. Beides kann auseinanderlaufen - ein Ordner wird entfernt, eine
+# Datei geloescht oder verschoben. Wird das beim Suchen nicht abgeglichen,
+# zeigt SmartSearch Treffer aus Ordnern, die der Nutzer laengst entfernt
+# hat. Deshalb laeuft jede Suche durch _nur_gueltige_eintraege().
+# ------------------------------------------------------------------
+
+def ueberwachte_ordner():
+    """Aktuell in der config.json eingetragene Ordner, absolut."""
+    return [
+        os.path.abspath(os.path.expanduser(o))
+        for o in lade_config().get("ordner", [])
+    ]
+
+
+def _liegt_in_ordnern(pfad, ordner_liste):
+    for o in ordner_liste:
+        if pfad == o or pfad.startswith(o + os.sep):
+            return True
+    return False
+
+
+def entferne_ordner_aus_index(ordner):
+    """Loescht alle Index-Eintraege unterhalb von 'ordner'.
+
+    Rueckgabe: Anzahl der entfernten Eintraege (Textabschnitte, nicht
+    Dateien).
+    """
+    ordner = os.path.abspath(os.path.expanduser(ordner))
+    eintraege = lade_bestehenden_index()
+    uebrig = [
+        e for e in eintraege
+        if not (e["datei"] == ordner or e["datei"].startswith(ordner + os.sep))
+    ]
+    if len(uebrig) != len(eintraege):
+        speichere_index(uebrig)
+    return len(eintraege) - len(uebrig)
+
+
+def bereinige_index():
+    """Wirft alles aus dem Index, was nicht mehr gilt: Eintraege ausserhalb
+    der ueberwachten Ordner und Dateien, die es nicht mehr gibt.
+
+    Wird nach jedem Indexlauf aufgerufen, damit die Datei nicht endlos
+    waechst und keine Karteileichen enthaelt.
+    """
+    ordner_liste = ueberwachte_ordner()
+    eintraege = lade_bestehenden_index()
+    if not eintraege:
+        return 0
+
+    existiert = {}
+    uebrig = []
+    for e in eintraege:
+        pfad = e["datei"]
+        if not _liegt_in_ordnern(pfad, ordner_liste):
+            continue
+        if pfad not in existiert:
+            existiert[pfad] = os.path.exists(pfad)
+        if existiert[pfad]:
+            uebrig.append(e)
+
+    if len(uebrig) != len(eintraege):
+        speichere_index(uebrig)
+    return len(eintraege) - len(uebrig)
+
+
+_such_cache = None                  # (kennung, eintraege, matrix)
+_such_cache_lock = threading.Lock()
+
+# Oberhalb dieser Groesse wird der Index NICHT im Arbeitsspeicher
+# behalten - ein Suchwerkzeug darf nicht mehrere Gigabyte belegen, nur um
+# ein paar Zehntelsekunden zu sparen.
+CACHE_OBERGRENZE_BYTES = 1_500_000_000
+
+
+def _index_mit_matrix():
+    """Gibt (eintraege, matrix) zurueck - den Index im Arbeitsspeicher.
+
+    WARUM: Vorher las JEDE Suche die komplette index.pkl neu von der
+    Platte und rechnete das Skalarprodukt anschliessend in einer
+    Python-Schleife, einmal pro Textabschnitt. Beides waechst mit der
+    Anzahl indexierter Dateien - bei einem groesseren Index vergehen
+    dadurch mehrere Sekunden, bevor ueberhaupt gerechnet wird, und zwar
+    bei jeder einzelnen Suche.
+
+    Jetzt wird die Datei nur dann neu gelesen, wenn sie sich seit dem
+    letzten Mal geaendert hat (Zeitstempel + Groesse), und alle Vektoren
+    liegen zusaetzlich als eine einzige Zahlenmatrix bereit. Der Vergleich
+    mit der Suchanfrage ist damit EINE Matrixmultiplikation statt
+    zehntausender Einzelaufrufe.
+
+    Der Zeitstempel-Vergleich ist die Verbindung zur Indexierung: sobald
+    sie eine neue index.pkl geschrieben hat (siehe speichere_index, das
+    atomar arbeitet), liest die naechste Suche automatisch die neue
+    Fassung - ohne Neustart der App.
+    """
+    global _such_cache
+    import numpy as np
+
+    try:
+        angaben = os.stat(INDEX_FILE)
+        kennung = (angaben.st_mtime_ns, angaben.st_size)
+    except OSError:
+        return [], None
+
+    with _such_cache_lock:
+        if _such_cache is not None and _such_cache[0] == kennung:
+            return _such_cache[1], _such_cache[2]
+
+        with open(INDEX_FILE, "rb") as f:
+            eintraege = pickle.load(f)
+
+        # Eintraege ohne Vektor (z.B. Dateien, die beim Indexieren nicht
+        # gelesen werden konnten) lassen sich nicht durchsuchen.
+        eintraege = [e for e in eintraege if "vektor" in e]
+
+        matrix = None
+        if eintraege:
+            try:
+                matrix = np.asarray([e["vektor"] for e in eintraege], dtype="float32")
+            except Exception as e:
+                # Ein alter Index mit unterschiedlich langen Vektoren laesst
+                # sich nicht stapeln. Dann lieber ohne Matrix weiterarbeiten
+                # als die Suche ganz scheitern lassen.
+                print(f"[Suche] Vektormatrix nicht baubar: {e}")
+                matrix = None
+
+        if angaben.st_size <= CACHE_OBERGRENZE_BYTES:
+            _such_cache = (kennung, eintraege, matrix)
+        else:
+            _such_cache = None
+
+        return eintraege, matrix
+
+
+def _gueltige_paare(paare):
+    """Wie _nur_gueltige_eintraege, arbeitet aber auf (Position, Eintrag)-
+    Paaren. Die Position wird fuer den Zugriff auf die Vektormatrix
+    gebraucht (siehe _index_mit_matrix)."""
+    ordner_liste = ueberwachte_ordner()
+    if not ordner_liste:
+        return []
+
+    existiert = {}
+    ergebnis = []
+    for i, e in paare:
+        pfad = e["datei"]
+        if not _liegt_in_ordnern(pfad, ordner_liste):
+            continue
+        if pfad not in existiert:
+            existiert[pfad] = os.path.exists(pfad)
+        if existiert[pfad]:
+            ergebnis.append((i, e))
+    return ergebnis
+
+
+def _nur_gueltige_eintraege(eintraege):
+    """Filtert eine frisch geladene Index-Liste auf das, was gerade zaehlt.
+
+    Bewusst nur gefiltert und NICHT gespeichert: eine Suche darf den Index
+    nie veraendern (es kann parallel indexiert werden). Das echte
+    Aufraeumen uebernimmt bereinige_index() nach dem Indexlauf.
+    """
+    ordner_liste = ueberwachte_ordner()
+    if not ordner_liste:
+        return []
+
+    existiert = {}
+    ergebnis = []
+    for e in eintraege:
+        pfad = e["datei"]
+        if not _liegt_in_ordnern(pfad, ordner_liste):
+            continue
+        if pfad not in existiert:
+            existiert[pfad] = os.path.exists(pfad)
+        if existiert[pfad]:
+            ergebnis.append(e)
+    return ergebnis
 
 
 def suche_intern(anfrage, top_n=10, ausgeschlossene_typen=None, zeitraum=None):
@@ -691,67 +995,224 @@ def suche_intern(anfrage, top_n=10, ausgeschlossene_typen=None, zeitraum=None):
 
     import numpy as np
 
-    with open(INDEX_FILE, "rb") as f:
-        eintraege = pickle.load(f)
+    # Index aus dem Arbeitsspeicher statt von der Platte - siehe
+    # _index_mit_matrix(). Jeder Eintrag behaelt seine Position im
+    # Gesamtindex, weil darueber gleich der fertig berechnete
+    # Aehnlichkeitswert abgegriffen wird.
+    alle_eintraege, matrix = _index_mit_matrix()
+    if not alle_eintraege:
+        return []
 
-    # Einträge ohne Vektor (z.B. Dateien, die beim Indexieren nicht gelesen
-    # werden konnten) können nicht durchsucht werden - herausfiltern.
-    eintraege = [e for e in eintraege if "vektor" in e]
+    paare = list(enumerate(alle_eintraege))
+
+    # Nur Treffer aus Ordnern, die JETZT ueberwacht werden, und nur
+    # Dateien, die es noch gibt (siehe _gueltige_paare).
+    paare = _gueltige_paare(paare)
 
     if ausgeschlossene_typen:
-        eintraege = [
-            e for e in eintraege
+        paare = [
+            (i, e) for i, e in paare
             if os.path.splitext(e["datei"])[1].lower() not in ausgeschlossene_typen
         ]
 
     cutoff = _zeitraum_cutoff(zeitraum)
     if cutoff is not None:
-        eintraege = [e for e in eintraege if e.get("geaendert", 0) >= cutoff]
+        paare = [(i, e) for i, e in paare if e.get("geaendert", 0) >= cutoff]
 
-    if not eintraege:
+    if not paare:
         return []
 
     modell = geladenes_modell()
-    anfrage_vektor = modell.encode([anfrage], normalize_embeddings=True)[0]
+    anfrage_vektor = np.asarray(
+        modell.encode([anfrage], normalize_embeddings=True)[0], dtype="float32")
     such_woerter = anfrage_woerter(anfrage)
 
+    # EINE Matrixmultiplikation fuer den gesamten Index statt eines
+    # np.dot() je Textabschnitt. Faellt die Matrix aus (alter Index mit
+    # uneinheitlichen Vektoren), wird wie frueher einzeln gerechnet.
+    if matrix is not None:
+        alle_werte = matrix @ anfrage_vektor
+    else:
+        alle_werte = None
+
+    # ------------------------------------------------------------------
+    # Bewertung auf DOKUMENTEBENE, nicht je Textabschnitt.
+    #
+    # Der Fehler vorher: Jeder 700-Zeichen-Abschnitt wurde einzeln bewertet,
+    # auch bei der Stichwortsuche. Bei einer Rechnung steht "Rechnung" aber
+    # im Briefkopf und die Artikelbezeichnung ("Drucker", ein Modellname)
+    # weiter unten in der Positionsliste - also in einem ANDEREN Abschnitt.
+    # Kein einzelner Abschnitt enthielt beide Suchwoerter, deshalb bekam das
+    # Dokument nie die volle Stichwort-Wertung und landete hinter
+    # thematisch aehnlichen Dokumenten, die gar keines der Woerter
+    # enthielten.
+    #
+    # Jetzt gilt: der semantische Wert stammt vom BESTEN Abschnitt, die
+    # Stichwort-Wertung vom GESAMTEN Dokument.
+    # ------------------------------------------------------------------
+    nach_datei = {}
+    for i, e in paare:
+        eintrag_liste = nach_datei.setdefault(e["datei"], [])
+        eintrag_liste.append((i, e))
+
     rohe_treffer = []
-    for e in eintraege:
-        semantik_score = float(np.dot(anfrage_vektor, e["vektor"]))
+    for pfad, abschnitte in nach_datei.items():
+        bester_abschnitt = None
+        bester_semantik = -1.0
+        for i, e in abschnitte:
+            if alle_werte is not None:
+                wert = float(alle_werte[i])
+            else:
+                wert = float(np.dot(anfrage_vektor, e["vektor"]))
+            if wert > bester_semantik:
+                bester_semantik = wert
+                bester_abschnitt = e
 
-        dateiname = os.path.basename(e["datei"]).lower()
-        text_lc = e["text"].lower()
+        dateiname = os.path.basename(pfad).lower()
+        gesamttext = " ".join(e.get("text", "") for _, e in abschnitte).lower()
 
-        kw_score = 0.0
+        gefundene_woerter = 0
+        im_dateinamen = 0
         if such_woerter:
-            treffer_anzahl = 0
             for w in such_woerter:
                 if w in dateiname:
-                    treffer_anzahl += 3.0
-                elif w in text_lc:
-                    treffer_anzahl += 1.5
-            kw_score = (treffer_anzahl / len(such_woerter)) * 0.3
+                    gefundene_woerter += 1
+                    im_dateinamen += 1
+                elif w in gesamttext:
+                    gefundene_woerter += 1
 
-        gesamt_score = semantik_score + kw_score
+        # Semantik auf 0..1 spreizen. BGE-M3 liefert selbst fuer voellig
+        # unverwandte Texte noch Werte um 0,55 - der rohe Wert nutzt also
+        # nur einen schmalen Ausschnitt der Skala. Ohne diese Spreizung
+        # faellt ein Unterschied von 0,05 gegenueber der Stichwortwertung
+        # kaum ins Gewicht, obwohl er inhaltlich erheblich ist.
+        semantik_norm = (bester_semantik - SEMANTIK_UNTERGRENZE) / (
+            SEMANTIK_OBERGRENZE - SEMANTIK_UNTERGRENZE)
+        semantik_norm = max(0.0, min(1.0, semantik_norm))
+
+        if such_woerter:
+            stichwort_norm = gefundene_woerter / len(such_woerter)
+            # Steht ein Wort im Dateinamen, ist das ein besonders klares
+            # Signal - ein Mensch benennt Dateien nach ihrem Zweck.
+            stichwort_norm = min(1.0, stichwort_norm + 0.15 * im_dateinamen)
+        else:
+            stichwort_norm = 0.0
+
+        if such_woerter:
+            gesamt_score = (GEWICHT_SEMANTIK * semantik_norm
+                            + GEWICHT_STICHWORT * stichwort_norm)
+        else:
+            gesamt_score = semantik_norm
+
+        # Kein einziges Suchwort im gesamten Dokument und semantisch nur
+        # mittelmaessig - dann lieber nichts anzeigen als etwas Falsches.
+        if such_woerter and gefundene_woerter == 0 and bester_semantik < SEMANTIK_MINDEST_OHNE_TREFFER:
+            continue
 
         if gesamt_score > SCORE_SCHWELLE:
-            rohe_treffer.append((gesamt_score, e))
+            rohe_treffer.append((gesamt_score, bester_abschnitt))
 
     rohe_treffer.sort(key=lambda x: x[0], reverse=True)
 
-    gesehene_dateien = set()
-    eindeutige_ergebnisse = []
+    # Abstand zum besten Treffer auswerten - siehe RELATIVER_ABSTAND.
+    if rohe_treffer:
+        mindestwert = rohe_treffer[0][0] * RELATIVER_ABSTAND
+        rohe_treffer = [p for p in rohe_treffer if p[0] >= mindestwert]
 
-    for score, eintrag in rohe_treffer:
-        datei_pfad = eintrag["datei"]
-        if datei_pfad not in gesehene_dateien:
-            gesehene_dateien.add(datei_pfad)
-            eindeutige_ergebnisse.append((score, eintrag))
+    return rohe_treffer[:top_n]
 
-        if len(eindeutige_ergebnisse) >= top_n:
-            break
 
-    return eindeutige_ergebnisse
+
+def ausschnitt_mit_fundstellen(text, such_woerter, laenge=170):
+    """Schneidet einen Textausschnitt RUND UM die erste Fundstelle heraus
+    und meldet, wo darin die Suchwoerter stehen.
+
+    Vorher begann der Ausschnitt immer am Anfang des Abschnitts. Steht das
+    gesuchte Wort weiter hinten, sah der Nutzer davon nichts - er bekam
+    einen Treffer angezeigt, ohne zu erkennen, warum es einer ist.
+
+    Rueckgabe: (ausschnitt, stellen) - 'stellen' ist eine Liste von
+    (start, ende) im Ausschnitt, jeweils bezogen auf dessen Zeichen.
+    """
+    text = (text or "").strip().replace("\n", " ")
+    text = re.sub(r"\s+", " ", text)
+    if not text:
+        return "", []
+
+    text_klein = text.lower()
+
+    # Alle Fundstellen sammeln und die Stelle waehlen, an der die meisten
+    # Suchwoerter dicht beieinanderstehen. Die erste Fundstelle zu nehmen
+    # waere zu einfach: sucht jemand "Canon Rechnung", steht "Rechnung"
+    # meist schon im Briefkopf, "Canon" aber erst in der Positionszeile -
+    # der Ausschnitt zeigte dann den Briefkopf statt der eigentlichen
+    # Fundstelle.
+    alle_stellen = []
+    for wort in such_woerter or []:
+        wort_klein = wort.lower()
+        von = 0
+        while True:
+            pos = text_klein.find(wort_klein, von)
+            if pos == -1:
+                break
+            alle_stellen.append(pos)
+            von = pos + 1
+
+    erste = None
+    if alle_stellen:
+        alle_stellen.sort()
+        bestes = (0, alle_stellen[0])
+        for kandidat in alle_stellen:
+            im_fenster = sum(1 for p in alle_stellen if kandidat <= p < kandidat + laenge)
+            if im_fenster > bestes[0]:
+                bestes = (im_fenster, kandidat)
+        erste = bestes[1]
+
+    if erste is None or len(text) <= laenge:
+        ausschnitt = text[:laenge]
+        versatz = 0
+        if len(text) > laenge:
+            ausschnitt = ausschnitt.rsplit(" ", 1)[0] + " …"
+    else:
+        # Die Fundstelle etwa ins erste Drittel legen, damit auch der
+        # Zusammenhang davor sichtbar bleibt.
+        start = max(0, erste - laenge // 3)
+        # Nicht mitten im Wort beginnen.
+        if start > 0:
+            leer = text.find(" ", start)
+            start = leer + 1 if 0 <= leer < start + 20 else start
+        ausschnitt = text[start:start + laenge]
+        if start + laenge < len(text):
+            ausschnitt = ausschnitt.rsplit(" ", 1)[0] + " …"
+        if start > 0:
+            ausschnitt = "… " + ausschnitt
+            versatz = start - 2
+        else:
+            versatz = start
+
+    # Alle Vorkommen im fertigen Ausschnitt einsammeln.
+    stellen = []
+    ausschnitt_klein = ausschnitt.lower()
+    for wort in such_woerter or []:
+        wort_klein = wort.lower()
+        von = 0
+        while True:
+            pos = ausschnitt_klein.find(wort_klein, von)
+            if pos == -1:
+                break
+            stellen.append((pos, pos + len(wort_klein)))
+            von = pos + 1
+
+    # Ueberlappungen zusammenfassen, damit die Einfaerbung sauber bleibt.
+    stellen.sort()
+    zusammengefasst = []
+    for start_, ende_ in stellen:
+        if zusammengefasst and start_ <= zusammengefasst[-1][1]:
+            zusammengefasst[-1] = (zusammengefasst[-1][0], max(zusammengefasst[-1][1], ende_))
+        else:
+            zusammengefasst.append((start_, ende_))
+
+    return ausschnitt, zusammengefasst
 
 
 def aehnliche_dateien(pfad, top_n=10):
@@ -774,10 +1235,9 @@ def aehnliche_dateien(pfad, top_n=10):
 
     pfad = os.path.abspath(os.path.expanduser(pfad))
 
-    with open(INDEX_FILE, "rb") as f:
-        eintraege = pickle.load(f)
-
-    eintraege = [e for e in eintraege if "vektor" in e]
+    # Denselben Arbeitsspeicher-Index benutzen wie die Suche.
+    eintraege, _ = _index_mit_matrix()
+    eintraege = _nur_gueltige_eintraege(eintraege)
 
     eigene_vektoren = [e["vektor"] for e in eintraege if e["datei"] == pfad]
     if not eigene_vektoren:

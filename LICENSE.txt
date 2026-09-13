@@ -1,0 +1,213 @@
+SmartSearch – Nutzungsbedingungen
+=================================
+
+Stand: August 2026 · Version 1.0
+
+Diese Bedingungen gelten für die kostenlose Fassung von SmartSearch.
+Die englische Fassung steht weiter unten. Bei Abweichungen ist die
+deutsche Fassung maßgeblich.
+
+
+1. Was du darfst
+----------------
+SmartSearch wird dir kostenlos zur Verfügung gestellt. Du darfst die
+Software auf beliebig vielen Rechnern, die dir gehören oder die du
+nutzt, installieren und verwenden – privat wie beruflich. Eine
+Registrierung ist nicht nötig, eine Vergütung wird nicht verlangt.
+
+
+2. Was du nicht darfst
+----------------------
+Ohne vorherige schriftliche Zustimmung ist es nicht gestattet,
+
+  a) die Software zu verkaufen, zu vermieten, zu verleasen oder
+     anderweitig gegen Entgelt weiterzugeben,
+  b) die Software zu verändern, zu dekompilieren, zurückzuentwickeln
+     oder abgeleitete Werke davon zu erstellen, soweit dies nicht
+     durch zwingendes Recht (insbesondere § 69e UrhG) erlaubt ist,
+  c) Urheberrechtshinweise oder diese Bedingungen zu entfernen oder
+     zu verändern,
+  d) die Software unter eigenem Namen oder als Teil eines eigenen
+     Produkts zu verbreiten.
+
+Die unveränderte, kostenlose Weitergabe an Privatpersonen ist
+erlaubt, solange diese Bedingungen beiliegen.
+
+
+3. Urheberrecht
+---------------
+Alle Rechte an der Software verbleiben beim Urheber. Mit diesen
+Bedingungen wird lediglich ein einfaches, nicht ausschließliches
+Nutzungsrecht eingeräumt – kein Eigentum an der Software übertragen.
+
+
+4. Deine Daten
+--------------
+SmartSearch verarbeitet Dateien ausschließlich lokal auf deinem
+Rechner. Es werden keine Dateiinhalte, Suchanfragen, Nutzungsdaten
+oder personenbezogenen Daten an den Anbieter oder an Dritte
+übermittelt.
+
+Einzige Ausnahme: Beim ersten Start wird einmalig ein KI-Modell aus
+dem Internet heruntergeladen, und die Software prüft gelegentlich, ob
+eine neuere Version vorliegt. Dabei werden keine Inhalte übertragen.
+
+
+5. Keine Gewährleistung
+-----------------------
+Die Software wird unentgeltlich und "wie besehen" überlassen. Eine
+Gewähr für Fehlerfreiheit, ununterbrochene Verfügbarkeit, Eignung für
+einen bestimmten Zweck oder für vollständige und zutreffende
+Suchergebnisse wird nicht übernommen.
+
+Insbesondere ersetzt SmartSearch keine Datensicherung. Lege von
+wichtigen Dateien unabhängig davon Sicherungskopien an.
+
+
+6. Haftung
+----------
+Da die Software unentgeltlich überlassen wird, wird nach § 521 BGB
+nur für Vorsatz und grobe Fahrlässigkeit gehaftet.
+
+Unberührt bleibt die Haftung
+
+  - bei Verletzung von Leben, Körper oder Gesundheit,
+  - bei arglistig verschwiegenen Mängeln,
+  - nach dem Produkthaftungsgesetz,
+  - soweit eine Garantie übernommen wurde.
+
+Im Übrigen ist die Haftung ausgeschlossen, auch für mittelbare
+Schäden, entgangenen Gewinn und Datenverlust.
+
+
+7. Änderungen und Beendigung
+----------------------------
+Diese Bedingungen können für künftige Versionen geändert werden. Für
+die bereits installierte Version gelten weiterhin die Bedingungen, die
+beim Herunterladen beilagen. Es besteht kein Anspruch darauf, dass die
+Software dauerhaft kostenlos angeboten oder weiterentwickelt wird.
+
+
+8. Verwendete Komponenten Dritter
+---------------------------------
+SmartSearch nutzt folgende Open-Source-Komponenten, die jeweils unter
+ihren eigenen Lizenzen stehen:
+
+  BGE-M3 (KI-Modell, BAAI)              MIT-Lizenz
+  sentence-transformers                 Apache-Lizenz 2.0
+  PyTorch                               BSD-3-Clause
+  CustomTkinter                         MIT-Lizenz
+  PyObjC                                MIT-Lizenz
+  pypdfium2 / PDFium                    BSD-3-Clause / Apache 2.0
+  pdfplumber, pypdf                     MIT-Lizenz
+  python-docx, openpyxl, python-pptx    MIT- bzw. MIT/LGPL-Lizenz
+  Pillow                                MIT-CMU-Lizenz
+  watchdog                              Apache-Lizenz 2.0
+
+Die Texterkennung für eingescannte PDFs nutzt das in macOS enthaltene
+Vision-Framework von Apple.
+
+
+9. Anwendbares Recht
+--------------------
+Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des
+UN-Kaufrechts. Zwingende Verbraucherschutzvorschriften des Staates, in
+dem du deinen gewöhnlichen Aufenthalt hast, bleiben unberührt.
+
+
+================================================================
+
+
+SmartSearch – Terms of Use (English translation)
+================================================
+
+As of: August 2026 · Version 1.0
+
+In case of discrepancies, the German version above prevails.
+
+
+1. What you may do
+------------------
+SmartSearch is provided to you free of charge. You may install and use
+the software on any number of computers you own or use, for private or
+professional purposes. No registration and no payment is required.
+
+
+2. What you may not do
+----------------------
+Without prior written consent, you may not
+
+  a) sell, rent, lease or otherwise distribute the software for a fee,
+  b) modify, decompile, reverse engineer or create derivative works,
+     except where mandatory law permits,
+  c) remove or alter copyright notices or these terms,
+  d) distribute the software under your own name or as part of your
+     own product.
+
+Passing the unmodified software on to private individuals free of
+charge is permitted, provided these terms are included.
+
+
+3. Copyright
+------------
+All rights in the software remain with the author. These terms grant a
+simple, non-exclusive right of use only; no ownership is transferred.
+
+
+4. Your data
+------------
+SmartSearch processes files exclusively on your local machine. No file
+contents, search queries, usage data or personal data are transmitted
+to the provider or to third parties.
+
+The only exception: on first launch an AI model is downloaded once
+from the internet, and the software occasionally checks whether a
+newer version is available. No content is transmitted in the process.
+
+
+5. No warranty
+--------------
+The software is provided free of charge and "as is". No warranty is
+given as to freedom from defects, uninterrupted availability, fitness
+for a particular purpose, or complete and accurate search results.
+
+In particular, SmartSearch is not a substitute for a backup. Keep
+independent copies of important files.
+
+
+6. Liability
+------------
+As the software is provided free of charge, liability is limited to
+intent and gross negligence pursuant to section 521 of the German
+Civil Code (BGB).
+
+This does not affect liability
+
+  - for injury to life, body or health,
+  - for fraudulently concealed defects,
+  - under the German Product Liability Act,
+  - where a guarantee has been given.
+
+Otherwise liability is excluded, including for indirect damages, loss
+of profit and loss of data.
+
+
+7. Changes and termination
+--------------------------
+These terms may change for future versions. The version you already
+installed remains governed by the terms supplied with it. There is no
+entitlement to the software remaining free of charge or continuing to
+be developed.
+
+
+8. Third-party components
+-------------------------
+See the German section above for the list of open-source components
+and their respective licenses.
+
+
+9. Governing law
+----------------
+German law applies, excluding the UN Convention on Contracts for the
+International Sale of Goods. Mandatory consumer protection provisions
+of your country of habitual residence remain unaffected.

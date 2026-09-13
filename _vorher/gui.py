@@ -23,27 +23,6 @@ FIX (siehe Review):
   aufgerufen, mit fortschritt_fn für die Prozentanzeige pro Datei.
 """
 
-# ZWEITES DOCK-SYMBOL WAEHREND DER INDEXIERUNG
-# -------------------------------------------
-# In der fertig gebauten .app startet ein Arbeits-Kindprozess (den die
-# KI-Bibliotheken beim Indexieren anlegen koennen) nicht einfach einen
-# Python-Interpreter, sondern das GESAMTE App-Bundle ein zweites Mal -
-# macOS haengt dafuer ein zweites Symbol ins Dock.
-#
-# multiprocessing.freeze_support() faengt genau das ab: erkennt der
-# Prozess, dass er als Arbeitskind gestartet wurde, erledigt er nur seine
-# Aufgabe und laeuft nie in den Programmstart weiter unten (Fenster,
-# Dock-Symbol, Menueleiste). Das MUSS vor allen schweren Importen stehen,
-# sonst baut das Kind vorher noch die halbe Anwendung auf.
-import multiprocessing
-multiprocessing.freeze_support()
-
-import os as _os_start
-# Die Tokenizer-Bibliothek legt sonst eigene Arbeitsprozesse an und warnt
-# bei jedem fork. Fuer eine Desktop-App bringt das nichts ausser Unruhe -
-# und potenziell genau das zweite Dock-Symbol von oben.
-_os_start.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
@@ -94,15 +73,9 @@ import search as smart_search
 import ocr
 import i18n
 from i18n import t
-import farben
 
 ctk.set_appearance_mode("System")
-# "blue" laedt das vollstaendige Standardthema - farben.thema_anwenden
-# ersetzt danach nur die Farbwerte durch die Markenfarben. Das muss vor
-# dem ersten Widget passieren, weil CustomTkinter die Werte beim
-# Erzeugen liest.
 ctk.set_default_color_theme("blue")
-farben.thema_anwenden(ctk)
 
 # Siehe pfade.py: liegt in ~/Library/Application Support/SmartSearch,
 # damit ein App-Update den Suchverlauf nicht mitloescht.
@@ -153,9 +126,14 @@ DATEITYP_GRUPPEN = {
     "Text": {".txt", ".md"},
 }
 
-# Die Toene stehen in farben.py, zusammen mit den geprueften
-# Kontrastwerten gegen die weisse Schrift.
-BADGE_FARBEN = farben.BADGE_FARBEN
+BADGE_FARBEN = {
+    ".pdf": ("#e53935", "#ffffff"),
+    ".docx": ("#1e88e5", "#ffffff"),
+    ".xlsx": ("#43a047", "#ffffff"),
+    ".pptx": ("#fb8c00", "#ffffff"),
+    ".txt": ("#757575", "#ffffff"),
+    ".md": ("#8e24aa", "#ffffff"),
+}
 
 
 def _version_tuple(v):
@@ -251,7 +229,7 @@ class SmartSearchNotchWindow(ctk.CTk):
         # und eigene Dialoge (Ordner verwalten, Nicht lesbare Dateien)
         # zuverlässig im Vordergrund, statt dass SmartSearch sich nach
         # kurzer Zeit von selbst wieder darüber schiebt.
-        self.bind("<FocusIn>", self._auf_fokus_gewinn)
+        self.bind("<FocusIn>", lambda e: self.attributes("-topmost", True))
 
         self.verlauf = self.lade_verlauf()
         self.aktuelle_treffer = []
@@ -328,32 +306,12 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.theme_label = ctk.CTkLabel(self.sidebar_frame, text=t("sidebar.appearance"), font=("Helvetica", 10), text_color="#78909c")
         self.theme_label.pack(padx=15, pady=(3, 2), anchor="w")
 
-        # Beschriftung <-> interner CustomTkinter-Modus.
-        #
-        # WARUM DIESE TABELLE: CustomTkinter kennt ausschliesslich die
-        # englischen Werte "System", "Light" und "Dark". Die Knoepfe zeigen
-        # aber die uebersetzte Beschriftung ("Hell"/"Dunkel"). Frueher ging
-        # genau dieses deutsche Wort direkt an ctk.set_appearance_mode(),
-        # das unbekannte Werte stillschweigend verwirft - der Umschalter
-        # sah funktionsfaehig aus, tat auf Deutsch aber nichts.
-        self.theme_label_zu_modus = {
-            t("sidebar.theme_system"): "System",
-            t("sidebar.theme_light"): "Light",
-            t("sidebar.theme_dark"): "Dark",
-        }
-        self.theme_modus_zu_label = {
-            modus: label for label, modus in self.theme_label_zu_modus.items()
-        }
-
         self.theme_seg = ctk.CTkSegmentedButton(
             self.sidebar_frame,
-            values=list(self.theme_label_zu_modus.keys()),
+            values=[t("sidebar.theme_system"), t("sidebar.theme_light"), t("sidebar.theme_dark")],
             command=self.theme_wechseln, font=("Helvetica", 10)
         )
-        # Beim Neuaufbau (Sprachwechsel) den zuletzt gewaehlten Modus
-        # wieder vorauswaehlen, nicht stumpf "System".
-        self.theme_seg.set(self.theme_modus_zu_label.get(
-            getattr(self, "aktueller_theme_modus", "System"), t("sidebar.theme_system")))
+        self.theme_seg.set(t("sidebar.theme_system"))
         self.theme_seg.pack(padx=12, pady=(0, 8), fill="x")
 
         # Beenden-Button: fest am unteren Rand verankert, damit er nie durch
@@ -362,27 +320,27 @@ class SmartSearchNotchWindow(ctk.CTk):
         # wird der Button optisch von der abgerundeten Fensterecke
         # "verschluckt" (siehe frühere Anpassung).
         self.quit_button = ctk.CTkButton(
-            self.sidebar_frame, text=t("sidebar.quit"), fg_color=farben.BEENDEN, hover_color=farben.BEENDEN_HOVER, anchor="w", command=self.beenden
+            self.sidebar_frame, text=t("sidebar.quit"), fg_color="#c62828", hover_color="#b71c1c", anchor="w", command=self.beenden
         )
         self.quit_button.pack(padx=12, pady=(8, 16), fill="x", side="bottom")
 
         self.btn_favs_anzeigen = ctk.CTkButton(
-            self.sidebar_frame, text=t("sidebar.favorites"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.favoriten_anzeigen
+            self.sidebar_frame, text=t("sidebar.favorites"), fg_color="#37474f", hover_color="#263238", anchor="w", command=self.favoriten_anzeigen
         )
         self.btn_favs_anzeigen.pack(padx=12, pady=3, fill="x")
 
         self.add_folder_button = ctk.CTkButton(
-            self.sidebar_frame, text=t("sidebar.add_folder"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.ordner_hinzufuegen_gui
+            self.sidebar_frame, text=t("sidebar.add_folder"), fg_color="#37474f", hover_color="#263238", anchor="w", command=self.ordner_hinzufuegen_gui
         )
         self.add_folder_button.pack(padx=12, pady=3, fill="x")
 
         self.manage_button = ctk.CTkButton(
-            self.sidebar_frame, text=t("sidebar.manage_folders"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.ordner_verwalten_gui
+            self.sidebar_frame, text=t("sidebar.manage_folders"), fg_color="#37474f", hover_color="#263238", anchor="w", command=self.ordner_verwalten_gui
         )
         self.manage_button.pack(padx=12, pady=3, fill="x")
 
         self.index_button = ctk.CTkButton(
-            self.sidebar_frame, text=t("sidebar.update_index"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.index_aktualisieren
+            self.sidebar_frame, text=t("sidebar.update_index"), fg_color="#37474f", hover_color="#263238", anchor="w", command=self.index_aktualisieren
         )
         self.index_button.pack(padx=12, pady=3, fill="x")
 
@@ -528,7 +486,7 @@ class SmartSearchNotchWindow(ctk.CTk):
         ctk.CTkButton(
             self.rueckmeldung_leiste, text=t("feedback.bar_button"),
             width=150, height=26, font=("Helvetica", 11),
-            fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            fg_color="#37474f", hover_color="#263238",
             command=self._rueckmeldung_schreiben
         ).grid(row=0, column=1, padx=(0, 6), pady=10)
 
@@ -552,7 +510,7 @@ class SmartSearchNotchWindow(ctk.CTk):
 
         self.btn_index_abbrechen = ctk.CTkButton(
             self.status_container, text=t("cancel"), width=70, height=20, font=("Helvetica", 9),
-            fg_color=farben.WARNUNG, hover_color=farben.WARNUNG_HOVER, command=self.index_abbrechen
+            fg_color="#c62828", hover_color="#b71c1c", command=self.index_abbrechen
         )
 
     # ---------- SPRACHWECHSEL OHNE NEUSTART ----------
@@ -604,11 +562,9 @@ class SmartSearchNotchWindow(ctk.CTk):
             self.sidebar_offen = False  # toggle_sidebar() erwartet den bisherigen Zustand
             self.toggle_sidebar()
 
-        # self.aktueller_theme_modus haelt den internen Wert
-        # ("System"/"Light"/"Dark"), der Knopf zeigt die uebersetzte
-        # Beschriftung - deshalb hier ueber die Tabelle umrechnen.
-        self.theme_seg.set(self.theme_modus_zu_label.get(
-            self.aktueller_theme_modus, t("sidebar.theme_system")))
+        # Theme-Werte ("System"/"Light"/"Dark") sind bewusst in beiden
+        # Sprachen identisch (siehe i18n.py) - kein t()-Aufruf nötig.
+        self.theme_seg.set(self.aktueller_theme_modus)
 
         if such_text and such_text != PLATZHALTER_TEXT:
             self.suchfeld.insert(0, such_text)
@@ -677,7 +633,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.withdraw()
 
         self.starte_ordner_überwachung()
-        self.waerme_modell_vor()
         self.aktualisiere_fehler_anzeige()
         self.check_toggle_loop()
         self.registriere_globalen_hotkey()
@@ -702,23 +657,12 @@ class SmartSearchNotchWindow(ctk.CTk):
 
     # ---------- THEME WECHSELN ----------
 
-    def theme_wechseln(self, auswahl):
-        """Umschalten zwischen System / Hell / Dunkel.
-
-        WICHTIG: `auswahl` ist die ANGEZEIGTE Beschriftung des Knopfes, auf
-        Deutsch also "Hell" bzw. "Dunkel". CustomTkinter versteht nur
-        "System"/"Light"/"Dark" und ignoriert alles andere kommentarlos -
-        genau daran scheiterte der Umschalter vorher. Deshalb wird die
-        Beschriftung hier erst in den internen Modus uebersetzt.
-
-        Eigener Merker statt ctk.get_appearance_mode(): CustomTkinter loest
-        "System" sofort in "Light"/"Dark" auf, d.h. get_appearance_mode()
-        gibt nie "System" zurueck - der Knopf wuerde beim Neuaufbau sonst
-        faelschlich "Hell" oder "Dunkel" vorauswaehlen.
-        """
-        modus = getattr(self, "theme_label_zu_modus", {}).get(auswahl, auswahl)
-        if modus not in ("System", "Light", "Dark"):
-            modus = "System"
+    def theme_wechseln(self, modus):
+        # Eigenen Merker statt ctk.get_appearance_mode() zu vertrauen:
+        # customtkinter löst "System" sofort in "Light"/"Dark" auf, d.h.
+        # get_appearance_mode() gibt nie "System" zurück - der Segmented-
+        # Button im Preferences-Fenster würde sonst beim erneuten Öffnen
+        # fälschlich "Light" oder "Dark" statt "System" vorauswählen.
         self.aktueller_theme_modus = modus
         ctk.set_appearance_mode(modus)
 
@@ -772,7 +716,6 @@ class SmartSearchNotchWindow(ctk.CTk):
             self.toggle_requested = False
             self.toggle_fenster()
         self._pruefe_zeigen_signal()
-        self._pruefe_dock_klick()
         self.after(50, self.check_toggle_loop)
 
     def fenster_anzeigen_von_extern(self):
@@ -784,131 +727,6 @@ class SmartSearchNotchWindow(ctk.CTk):
             self.after(0, self.zeige_unter_notch)
         except Exception:
             pass
-
-    def waerme_modell_vor(self):
-        """Laedt das KI-Modell gleich nach dem Start im Hintergrund.
-
-        Ohne das passiert es erst bei der ersten Suche - und dann wartet
-        man einmal zehn Sekunden und laenger auf ein Ergebnis, das danach
-        in Bruchteilen einer Sekunde da ist. Genau dieser erste Eindruck
-        ist es, den man als "die App sucht ewig" in Erinnerung behaelt.
-
-        Bewusst nur, wenn das Modell schon auf der Platte liegt: sonst
-        wuerde der Programmstart ungefragt einen zwei Gigabyte grossen
-        Download anstossen.
-
-        Fehler werden hier absichtlich nur protokolliert. Geht etwas
-        schief, faellt es bei der echten Suche ohnehin wieder auf - dort
-        mit einer Erklaerung fuer den Nutzer.
-        """
-        def _laden():
-            try:
-                if smart_search.modell_ist_vorhanden():
-                    smart_search.geladenes_modell()
-            except Exception as e:
-                print(f"[Start] Modell-Vorladen uebersprungen: {e}")
-
-        threading.Thread(target=_laden, daemon=True).start()
-
-    # ---------- NEBENFENSTER (Dialoge) ----------
-
-    @staticmethod
-    def _fenster_lebt(fenster):
-        try:
-            return bool(fenster.winfo_exists())
-        except Exception:
-            return False
-
-    def nebenfenster_offen(self):
-        """True, solange mindestens ein Dialog offen ist."""
-        offen = [f for f in getattr(self, "_nebenfenster", []) if self._fenster_lebt(f)]
-        self._nebenfenster = offen
-        return bool(offen)
-
-    def nebenfenster_anmelden(self, fenster):
-        """Merkt sich einen offenen Dialog (Einstellungen, Ordnerliste,
-        Setup-Hilfe ...) und holt ihn nach vorne.
-
-        WARUM NOETIG: Das Hauptfenster haelt sich mit -topmost ganz oben
-        und setzt das bei jedem Fokus erneut. Ein Dialog rutschte dabei
-        dahinter und wirkte geschlossen, obwohl er noch offen war. Ueber
-        diese Liste weiss das Hauptfenster, dass es sich gerade NICHT nach
-        oben setzen darf (siehe _auf_fokus_gewinn).
-        """
-        self.nebenfenster_offen()          # raeumt geschlossene Fenster weg
-        offen = getattr(self, "_nebenfenster", [])
-        if fenster not in offen:
-            offen.append(fenster)
-        self._nebenfenster = offen
-
-        # Solange ein Dialog offen ist, gibt das Hauptfenster den
-        # Vordergrund ab - sonst konkurrieren zwei -topmost-Fenster und
-        # das zuletzt gehobene gewinnt.
-        try:
-            self.attributes("-topmost", False)
-        except Exception:
-            pass
-        try:
-            fenster.lift()
-            fenster.focus_force()
-        except Exception:
-            pass
-
-    def nebenfenster_heben(self):
-        """Holt alle noch offenen Dialoge wieder vor das Hauptfenster."""
-        if not self.nebenfenster_offen():
-            return
-        for fenster in self._nebenfenster:
-            try:
-                fenster.attributes("-topmost", True)
-                fenster.lift()
-            except Exception:
-                pass
-        try:
-            self._nebenfenster[-1].focus_force()
-        except Exception:
-            pass
-
-    def _auf_fokus_gewinn(self, event=None):
-        """Das Hauptfenster haelt sich normalerweise ganz oben (es ist ein
-        Popup, das ueber allem liegen soll). Ist aber ein eigener Dialog
-        offen, darf es sich NICHT wieder nach oben setzen - sonst
-        verschwindet der Dialog dahinter."""
-        try:
-            if self.nebenfenster_offen():
-                self.attributes("-topmost", False)
-                self.after(60, self.nebenfenster_heben)
-            else:
-                self.attributes("-topmost", True)
-        except Exception:
-            pass
-
-    def _pruefe_dock_klick(self):
-        """Klick auf das App-Symbol im Dock, Launchpad oder Cmd+Tab soll
-        das Fenster zurueckholen - ohne Umweg ueber die Lupe.
-
-        Dafuer ist eigentlich ::tk::mac::ReopenApplication zustaendig
-        (siehe __init__), diese Meldung kommt im gebauten Bundle aber nicht
-        zuverlaessig an. Deshalb hier der zweite, unabhaengige Weg: macOS
-        macht SmartSearch beim Klick aufs Symbol zur aktiven Anwendung.
-        Wechselt der Zustand von "nicht aktiv" auf "aktiv" und ist das
-        Fenster versteckt, wird es gezeigt.
-
-        Bewusst nur die FLANKE (nicht-aktiv -> aktiv): sonst wuerde das
-        Fenster unmittelbar nach jedem Verstecken wieder aufspringen.
-        """
-        if not system_ui or not hasattr(system_ui, "app_ist_aktiv"):
-            return
-        try:
-            aktiv = system_ui.app_ist_aktiv()
-            if aktiv is None:
-                return
-            war_aktiv = getattr(self, "_war_aktiv", True)
-            self._war_aktiv = aktiv
-            if aktiv and not war_aktiv and self.state() == "withdrawn":
-                self.zeige_unter_notch()
-        except Exception as e:
-            print(f"[Dock] Klick-Erkennung fehlgeschlagen: {e}")
 
     def _pruefe_zeigen_signal(self):
         """Wurde SmartSearch ein zweites Mal gestartet, legt die zweite
@@ -959,10 +777,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.focus_force()
         self.suchfeld.focus_set()
 
-        # Offene Dialoge nicht unter dem Hauptfenster begraben. Kurz
-        # verzoegert, damit das Heben NACH dem lift() oben greift.
-        self.after(60, self.nebenfenster_heben)
-
     def toggle_fenster(self):
         if self.winfo_viewable():
             self.withdraw()
@@ -1002,19 +816,6 @@ class SmartSearchNotchWindow(ctk.CTk):
 
     def beenden(self):
         self.indexierung_abbrechen = True
-
-        # ZUERST verschwinden, dann aufraeumen. Das Aufraeumen unten kann
-        # bis zu zwei Sekunden dauern (Ordnerueberwachung anhalten) - genau
-        # so lange waere sonst noch ein Dock-Symbol zu sehen, und zwar
-        # nicht das eigene: das wird zur Laufzeit gesetzt und faellt beim
-        # Beenden weg, worauf macOS das Symbol des ausfuehrenden Programms
-        # zeigt (beim Start aus dem Quelltext die Python-Rakete).
-        try:
-            self.withdraw()
-        except Exception:
-            pass
-        if system_ui and hasattr(system_ui, "aus_dem_dock_nehmen"):
-            system_ui.aus_dem_dock_nehmen()
         # Sperrdatei selbst aufraeumen: weiter unten steht os._exit(0), und
         # das geht an atexit vorbei. Bliebe die Datei liegen, koennte ein
         # spaeterer Start sie faelschlich fuer eine laufende Instanz halten
@@ -1120,7 +921,7 @@ class SmartSearchNotchWindow(ctk.CTk):
     def _aktualisiere_karten_hervorhebung(self):
         for idx, (card, _) in enumerate(self.card_widgets):
             if idx == self.fokussierter_index:
-                card.configure(border_width=2, border_color=farben.AKZENT)
+                card.configure(border_width=2, border_color="#1f77b4")
             else:
                 card.configure(border_width=0)
         self._scrolle_zu_fokussierter_karte()
@@ -1403,7 +1204,7 @@ class SmartSearchNotchWindow(ctk.CTk):
         ).pack(padx=4, pady=(0, 8), anchor="w")
 
         ctk.CTkButton(
-            parent, text=t("help.guide_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            parent, text=t("help.guide_button"), fg_color="#37474f", hover_color="#263238",
             anchor="w", command=self._guide_aus_einstellungen_oeffnen
         ).pack(padx=4, pady=(0, 18), fill="x")
 
@@ -1427,8 +1228,8 @@ class SmartSearchNotchWindow(ctk.CTk):
             text_color="#78909c", justify="left", wraplength=400
         ).pack(padx=4, pady=(0, 8), anchor="w")
         ctk.CTkButton(
-            parent, text=t("help.feedback_button"), fg_color=farben.SEITE_KNOPF,
-            hover_color=farben.SEITE_KNOPF_HOVER, anchor="w", command=self.oeffne_rueckmeldung
+            parent, text=t("help.feedback_button"), fg_color="#37474f",
+            hover_color="#263238", anchor="w", command=self.oeffne_rueckmeldung
         ).pack(padx=4, pady=(0, 18), fill="x")
 
         # Texterkennung sichtbar machen: frueher schlug OCR auf fremden Macs
@@ -1615,7 +1416,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("settings.window_title"))
         top.geometry("480x420")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
         top.protocol("WM_DELETE_WINDOW", top.destroy)
         self.einstellungen_fenster = top
 
@@ -1665,7 +1465,7 @@ class SmartSearchNotchWindow(ctk.CTk):
             tab_allgemein, text=t("settings.version_label", version=APP_VERSION), font=("Helvetica", 11), text_color="#78909c"
         ).pack(padx=4, pady=(20, 4), anchor="w")
         ctk.CTkButton(
-            tab_allgemein, text=t("settings.check_updates_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            tab_allgemein, text=t("settings.check_updates_button"), fg_color="#37474f", hover_color="#263238",
             anchor="w", command=lambda: self.pruefe_auf_updates(manuell=True)
         ).pack(padx=4, pady=4, fill="x")
 
@@ -1679,11 +1479,11 @@ class SmartSearchNotchWindow(ctk.CTk):
             font=("Helvetica", 11), text_color="#78909c", justify="left"
         ).pack(padx=4, pady=(12, 12), anchor="w")
         ctk.CTkButton(
-            tab_backup, text=t("backup.export_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            tab_backup, text=t("backup.export_button"), fg_color="#37474f", hover_color="#263238",
             anchor="w", command=self.einstellungen_exportieren
         ).pack(padx=4, pady=4, fill="x")
         ctk.CTkButton(
-            tab_backup, text=t("backup.import_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            tab_backup, text=t("backup.import_button"), fg_color="#37474f", hover_color="#263238",
             anchor="w", command=self.einstellungen_importieren
         ).pack(padx=4, pady=4, fill="x")
 
@@ -1718,7 +1518,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("guide.title"))
         top.geometry("660x640")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
         top.grab_set()
 
         schritte = ["prinzip", "funktionen", "datenschutz"]
@@ -1789,7 +1588,7 @@ class SmartSearchNotchWindow(ctk.CTk):
 
         btn_weiter = ctk.CTkButton(
             fuss, text=t("guide.next"), width=124, height=32,
-            fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, font=("Helvetica", 12, "bold"),
+            fg_color="#37474f", hover_color="#263238", font=("Helvetica", 12, "bold"),
             command=lambda: blaettern(1)
         )
         btn_weiter.pack(side="right")
@@ -1895,7 +1694,7 @@ class SmartSearchNotchWindow(ctk.CTk):
                 ctk.CTkCheckBox(
                     zeile, text=label, variable=checkbox_vars[pfad],
                     font=("Helvetica", 12.5), checkbox_width=18, checkbox_height=18,
-                    fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, width=150
+                    fg_color="#37474f", hover_color="#263238", width=150
                 ).pack(side="left")
                 ctk.CTkLabel(
                     zeile, text=pfad, font=("Helvetica", 11), text_color=GRAU
@@ -2119,7 +1918,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("update.available_title"))
         top.geometry("400x260")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
         top.grab_set()
 
         ctk.CTkLabel(
@@ -2147,7 +1945,7 @@ class SmartSearchNotchWindow(ctk.CTk):
             command=top.destroy
         ).pack(side="left")
         ctk.CTkButton(
-            button_zeile, text=t("update.download_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
+            button_zeile, text=t("update.download_button"), fg_color="#37474f", hover_color="#263238",
             command=herunterladen
         ).pack(side="right")
 
@@ -2157,7 +1955,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("folders.dialog_title"))
         top.geometry("520x360")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
         top.grab_set()
 
         lbl = ctk.CTkLabel(top, text=t("folders.heading"), font=("Helvetica", 14, "bold"))
@@ -2196,14 +1993,14 @@ class SmartSearchNotchWindow(ctk.CTk):
                         self.starte_ordner_überwachung()
 
                 btn_del = ctk.CTkButton(
-                    row, text=t("folders.remove_button"), width=70, height=24, fg_color=farben.WARNUNG, hover_color=farben.WARNUNG_HOVER, font=("Helvetica", 10),
+                    row, text=t("folders.remove_button"), width=70, height=24, fg_color="#c62828", hover_color="#b71c1c", font=("Helvetica", 10),
                     command=_entfernen_mit_bestaetigung
                 )
                 btn_del.pack(side="right", padx=4)
 
         lade_ordner_liste()
 
-        btn_add = ctk.CTkButton(top, text=t("folders.add_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda: [self.ordner_hinzufuegen_gui(), lade_ordner_liste()])
+        btn_add = ctk.CTkButton(top, text=t("folders.add_button"), fg_color="#37474f", hover_color="#263238", command=lambda: [self.ordner_hinzufuegen_gui(), lade_ordner_liste()])
         btn_add.pack(side="left", padx=15, pady=(0, 15))
 
         btn_close = ctk.CTkButton(top, text=t("folders.close_button"), command=top.destroy)
@@ -2374,7 +2171,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("model.download_failed_title"))
         top.geometry("460x260")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
 
         ctk.CTkLabel(
             top, text=t("model.download_failed_heading"), font=("Helvetica", 15, "bold")
@@ -2403,8 +2199,8 @@ class SmartSearchNotchWindow(ctk.CTk):
             self.index_aktualisieren()
 
         ctk.CTkButton(
-            zeile, text=t("model.download_failed_retry"), fg_color=farben.SEITE_KNOPF,
-            hover_color=farben.SEITE_KNOPF_HOVER, command=erneut_versuchen
+            zeile, text=t("model.download_failed_retry"), fg_color="#37474f",
+            hover_color="#263238", command=erneut_versuchen
         ).pack(side="right")
 
     def _programm_unvollstaendig(self, fehler):
@@ -2420,7 +2216,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("model.incomplete_title"))
         top.geometry("460x300")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
 
         ctk.CTkLabel(
             top, text=t("model.incomplete_heading"), font=("Helvetica", 15, "bold")
@@ -2449,8 +2244,8 @@ class SmartSearchNotchWindow(ctk.CTk):
             self.oeffne_rueckmeldung(vorbelegung=str(fehler))
 
         ctk.CTkButton(
-            zeile, text=t("model.incomplete_report"), fg_color=farben.SEITE_KNOPF,
-            hover_color=farben.SEITE_KNOPF_HOVER, command=melden
+            zeile, text=t("model.incomplete_report"), fg_color="#37474f",
+            hover_color="#263238", command=melden
         ).pack(side="right")
 
     def _index_fertig(self):
@@ -2495,7 +2290,6 @@ class SmartSearchNotchWindow(ctk.CTk):
         top.title(t("errors.dialog_title"))
         top.geometry("560x400")
         top.attributes("-topmost", True)
-        self.nebenfenster_anmelden(top)
         top.grab_set()
 
         lbl = ctk.CTkLabel(
@@ -2525,7 +2319,7 @@ class SmartSearchNotchWindow(ctk.CTk):
 
         btn_retry = ctk.CTkButton(
             top, text=t("errors.retry_button"),
-            fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=neuversuch
+            fg_color="#37474f", hover_color="#263238", command=neuversuch
         )
         btn_retry.pack(side="left", padx=15, pady=(0, 15))
 
@@ -2619,7 +2413,7 @@ class SmartSearchNotchWindow(ctk.CTk):
             pfad = eintrag["datei"]
             name = os.path.basename(pfad)
             ext = os.path.splitext(name)[1].lower()
-            bg_col, fg_col = BADGE_FARBEN.get(ext, farben.BADGE_RUECKFALL)
+            bg_col, fg_col = BADGE_FARBEN.get(ext, ("#37474f", "#ffffff"))
 
             card = ctk.CTkFrame(self.cards_scrollframe, corner_radius=8)
             card.pack(fill="x", padx=2, pady=3)
@@ -2631,16 +2425,16 @@ class SmartSearchNotchWindow(ctk.CTk):
             lbl_badge = ctk.CTkLabel(zeile_oben, text=f" {ext.replace('.','').upper()} ", font=("Helvetica", 9, "bold"), fg_color=bg_col, text_color=fg_col, corner_radius=4)
             lbl_badge.pack(side="left", padx=8, pady=8)
 
-            lbl_titel = ctk.CTkLabel(zeile_oben, text=f"[{score:.2f}] {self._kuerze_dateiname(name)}", font=("Helvetica", 11, "bold"), text_color=farben.DATEINAME)
+            lbl_titel = ctk.CTkLabel(zeile_oben, text=f"[{score:.2f}] {self._kuerze_dateiname(name)}", font=("Helvetica", 11, "bold"), text_color="#1f77b4")
             lbl_titel.pack(side="left", padx=4)
 
-            btn_sim = ctk.CTkButton(zeile_oben, text=t("card.similar"), width=65, height=20, font=("Helvetica", 9), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda p=pfad: self.aehnliche_suchen(p))
+            btn_sim = ctk.CTkButton(zeile_oben, text=t("card.similar"), width=65, height=20, font=("Helvetica", 9), fg_color="#37474f", command=lambda p=pfad: self.aehnliche_suchen(p))
             btn_sim.pack(side="right", padx=2)
 
-            btn_ql = ctk.CTkButton(zeile_oben, text=t("card.preview"), width=65, height=20, font=("Helvetica", 9), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda p=pfad: self.quicklook_im_vordergrund(p))
+            btn_ql = ctk.CTkButton(zeile_oben, text=t("card.preview"), width=65, height=20, font=("Helvetica", 9), fg_color="#37474f", command=lambda p=pfad: self.quicklook_im_vordergrund(p))
             btn_ql.pack(side="right", padx=2)
 
-            btn_finder = ctk.CTkButton(zeile_oben, text=t("card.finder"), width=55, height=20, font=("Helvetica", 9), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER, command=lambda p=pfad: self.im_finder_zeigen_im_vordergrund(p))
+            btn_finder = ctk.CTkButton(zeile_oben, text=t("card.finder"), width=55, height=20, font=("Helvetica", 9), fg_color="#37474f", command=lambda p=pfad: self.im_finder_zeigen_im_vordergrund(p))
             btn_finder.pack(side="right", padx=2)
 
             btn_open = ctk.CTkButton(zeile_oben, text=t("card.open"), width=50, height=20, font=("Helvetica", 9), command=lambda p=pfad: self.datei_oeffnen_im_vordergrund(p))
@@ -2676,8 +2470,7 @@ class SmartSearchNotchWindow(ctk.CTk):
 
                 try:
                     txt_ausschnitt.tag_config(
-                        "fundstelle", background=farben.FUND_HINTERGRUND,
-                        foreground=farben.FUND_TEXT)
+                        "fundstelle", background="#2f6fb5", foreground="#ffffff")
                     for start_, ende_ in stellen:
                         # +1 wegen des vorangestellten Anfuehrungszeichens.
                         txt_ausschnitt.tag_add(
@@ -2859,45 +2652,12 @@ def _bereits_offene_instanz_aktivieren():
     return False
 
 
-def _start_protokollieren():
-    """Schreibt eine Zeile pro Programmstart nach start_log.txt.
-
-    Reine Diagnosehilfe: taucht ein zweites Dock-Symbol auf, steht hier
-    schwarz auf weiss, ob wirklich ein zweiter Prozess gestartet wurde
-    (zwei Zeilen mit unterschiedlicher Prozessnummer im selben Moment)
-    oder ob macOS nur zweimal dasselbe Programm anzeigt. Die Datei bleibt
-    klein - es werden nur die letzten 50 Zeilen aufgehoben.
-    """
-    try:
-        from pfade import DATEN_ORDNER
-        os.makedirs(DATEN_ORDNER, exist_ok=True)
-        pfad = os.path.join(DATEN_ORDNER, "start_log.txt")
-        zeile = "%s  PID %s  Elternprozess %s  argv=%s\n" % (
-            time.strftime("%Y-%m-%d %H:%M:%S"), os.getpid(), os.getppid(), sys.argv)
-        zeilen = []
-        if os.path.exists(pfad):
-            with open(pfad, encoding="utf-8", errors="replace") as f:
-                zeilen = f.readlines()[-49:]
-        with open(pfad, "w", encoding="utf-8") as f:
-            f.writelines(zeilen)
-            f.write(zeile)
-    except Exception as e:
-        print(f"[Start] Startprotokoll nicht moeglich: {e}")
-
-
 if __name__ == "__main__":
-    _start_protokollieren()
-
     if "--selbsttest" in sys.argv:
         _selbsttest()
 
     if _bereits_offene_instanz_aktivieren():
         sys.exit(0)
-
-    # Muss VOR dem ersten Fenster stehen: Tk liest den Programmnamen fuer
-    # das Anwendungsmenue genau einmal, beim Aufbau des Fensters.
-    if system_ui and hasattr(system_ui, "programmnamen_setzen"):
-        system_ui.programmnamen_setzen("SmartSearch")
 
     app_window = SmartSearchNotchWindow()
 

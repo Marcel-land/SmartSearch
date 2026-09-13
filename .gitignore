@@ -1,11 +1,32 @@
+# Umgebung und Bauergebnisse
 venv/
 dist/
 build/
 __pycache__/
 *.pyc
+
+# Fertige Programmpakete gehören nicht ins Repository.
+# GitHub lehnt Dateien über 100 MB ohnehin ab; das DMG wird stattdessen
+# als Anhang eines Release veröffentlicht.
+*.dmg
+*.zip
+
+# Persönliche Daten und Zwischenstände - liegen im Benutzerordner,
+# haben im Repository nichts verloren.
 index.pkl
+config.json
 favoriten.json
 verlauf.json
-config.json
-.DS_Store
 lizenz.json
+
+# Protokolle der Hilfsskripte
+build_log.txt
+test_log.txt
+pruef_log.txt
+fehlerspeicher.txt
+app_ausgabe.txt
+
+# Zum Löschen vorgemerkt
+_to_delete/
+
+.DS_Store

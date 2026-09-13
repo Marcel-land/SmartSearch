@@ -47,5 +47,18 @@ app = BUNDLE(
     coll,
     name='SmartSearch Pro.app',
     icon='icon.icns',
-    bundle_identifier=None,
+    # WICHTIG: ohne feste Bundle-Kennung erkennt SmartSearch beim Start
+    # nicht, dass es schon laeuft (siehe laufende_instanz_aktivieren in
+    # menueleiste_mac.py) - dann oeffnet sich die App ein zweites Mal und
+    # es stehen zwei Symbole im Dock. Die Kennung muss mit BUNDLE_KENNUNG
+    # in menueleiste_mac.py uebereinstimmen.
+    bundle_identifier='de.smartsearch.app',
+    info_plist={
+        'CFBundleName': 'SmartSearch',
+        'CFBundleDisplayName': 'SmartSearch',
+        'NSHighResolutionCapable': True,
+        'LSUIElement': False,
+        # macOS soll das Bundle nie ein zweites Mal starten.
+        'LSMultipleInstancesProhibited': True,
+    },
 )

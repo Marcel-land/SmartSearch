@@ -1,0 +1,454 @@
+<title>SmartSearch Release-Fahrplan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;600&display=swap">
+<style>
+  :root {
+    --papier:    #f7f5f0;
+    --karte:     #fffefb;
+    --tinte:     #1b2733;
+    --graphit:   #5f6c78;
+    --rotstift:  #a8392c;
+    --linie:     #ded7ca;
+    --linie-zart:#ebe6dc;
+    --gruen:     #3f6b4a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --papier:    #151a20;
+      --karte:     #1c222a;
+      --tinte:     #e6e3db;
+      --graphit:   #97a2ad;
+      --rotstift:  #e08573;
+      --linie:     #2e3841;
+      --linie-zart:#242c34;
+      --gruen:     #7fae8b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --papier:    #151a20;
+    --karte:     #1c222a;
+    --tinte:     #e6e3db;
+    --graphit:   #97a2ad;
+    --rotstift:  #e08573;
+    --linie:     #2e3841;
+    --linie-zart:#242c34;
+    --gruen:     #7fae8b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--papier);
+    color: var(--tinte);
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .blatt { max-width: 720px; margin: 0 auto; }
+
+  /* ---------- Kopf ---------- */
+  header { padding: 64px 0 40px; border-bottom: 2px solid var(--tinte); }
+
+  .kennung {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--graphit);
+    margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: clamp(30px, 5.5vw, 42px);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 20px;
+  }
+
+  .vorwort { font-size: 17px; color: var(--graphit); margin: 0; max-width: 60ch; }
+  .vorwort strong { color: var(--tinte); font-weight: 500; }
+
+  /* ---------- Phasen ---------- */
+  .phase { margin-top: 52px; }
+
+  .phase-kopf {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+  .phase-kopf h2 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .phase-kopf .dauer {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--graphit);
+    white-space: nowrap;
+  }
+  .phase > .einleitung {
+    color: var(--graphit);
+    font-size: 15px;
+    margin: 0 0 26px;
+    max-width: 62ch;
+  }
+
+  /* ---------- Schritte ---------- */
+  ol.schritte { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+  li.schritt {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 0 16px;
+    padding: 18px 0;
+    border-top: 1px solid var(--linie-zart);
+    align-items: start;
+  }
+  li.schritt:first-child { border-top: 1px solid var(--linie); }
+
+  .nummer {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--graphit);
+    padding-top: 3px;
+    user-select: none;
+  }
+
+  .kopfzeile { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 3px; }
+
+  .titel { font-weight: 600; font-size: 16.5px; }
+
+  .wer {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid var(--linie);
+    border-radius: 2px;
+    color: var(--graphit);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .wer.du { color: var(--rotstift); border-color: var(--rotstift); }
+
+  .schritt p { margin: 0; color: var(--graphit); font-size: 15px; max-width: 60ch; }
+  .schritt p + p { margin-top: 8px; }
+
+  code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.88em;
+    background: var(--linie-zart);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--tinte);
+    word-break: break-word;
+  }
+
+  .fertig {
+    margin-top: 10px;
+    padding-left: 13px;
+    border-left: 2px solid var(--gruen);
+    font-size: 14.5px;
+    color: var(--graphit);
+  }
+  .fertig b { color: var(--tinte); font-weight: 500; }
+
+  /* ---------- Entscheidung ---------- */
+  .entscheidung {
+    margin: 8px 0 0;
+    border: 1px solid var(--linie);
+    background: var(--karte);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .entscheidung-titel {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--graphit);
+    padding: 11px 16px 9px;
+    border-bottom: 1px solid var(--linie-zart);
+  }
+  .zweig {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 14px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--linie-zart);
+    font-size: 15px;
+    align-items: baseline;
+  }
+  .zweig:first-of-type { border-top: none; }
+  .quote {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .zweig.gut .quote  { color: var(--gruen); }
+  .zweig.mittel .quote { color: var(--graphit); }
+  .zweig.stopp .quote { color: var(--rotstift); }
+  .zweig div:last-child { color: var(--graphit); }
+  .zweig b { color: var(--tinte); font-weight: 500; }
+
+  /* ---------- Angaben-Liste ---------- */
+  dl.angaben { margin: 12px 0 0; display: flex; flex-direction: column; gap: 0; }
+  dl.angaben div {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 14px;
+    padding: 10px 0;
+    border-top: 1px solid var(--linie-zart);
+    font-size: 14.5px;
+  }
+  dl.angaben dt { font-weight: 500; }
+  dl.angaben dd { margin: 0; color: var(--graphit); }
+
+  /* ---------- Abschluss ---------- */
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--linie);
+    font-size: 14px;
+    color: var(--graphit);
+  }
+
+  @media (max-width: 620px) {
+    li.schritt { grid-template-columns: 26px minmax(0, 1fr); gap: 0 12px; }
+    .zweig { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    dl.angaben div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="blatt">
+
+<header>
+  <p class="kennung">SmartSearch 1.0.1 &nbsp;·&nbsp; Stand 2. September 2026</p>
+  <h1>Vom fehlerhaften Build zur Veröffentlichung</h1>
+  <p class="vorwort">
+    Vierzehn Schritte in vier Abschnitten. Die Reihenfolge ist keine Empfehlung,
+    sondern eine Abhängigkeit: Jeder Abschnitt setzt voraus, dass der davor
+    abgeschlossen ist. <strong>Der wichtigste Punkt ist Abschnitt 2</strong> — dort
+    entscheidet sich, ob veröffentlicht wird.
+  </p>
+</header>
+
+<!-- ===================== 1 ===================== -->
+<section class="phase">
+  <div class="phase-kopf">
+    <h2>1 · Den Fehler ausräumen</h2>
+    <span class="dauer">ca. 30 Min</span>
+  </div>
+  <p class="einleitung">
+    Die geänderten Dateien liegen bereits in deinem Ordner. Es fehlt nur noch
+    der Neubau und der Gegentest auf dem zweiten Mac.
+  </p>
+
+  <ol class="schritte">
+    <li class="schritt">
+      <span class="nummer">01</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Neu bauen</span><span class="wer du">Du</span></div>
+        <p><code>BUILD STARTEN.command</code> im Ordner <code>smartsearch_aktuell</code> doppelklicken. Läuft etwa zehn Minuten, das Fenster dabei offen lassen.</p>
+        <p class="fertig"><b>Fertig, wenn:</b> unten „Fertig." steht und <code>SmartSearch-1.0.1.dmg</code> aufgelistet wird.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">02</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Bundle prüfen</span><span class="wer du">Du</span></div>
+        <p><code>BUNDLE PRUEFEN.command</code> doppelklicken. Die gebaute App startet sich selbst und importiert alles, was sie später braucht.</p>
+        <p class="fertig"><b>Fertig, wenn:</b> im oberen Abschnitt <b>„Ergebnis: vollständig"</b> steht und bei <code>torchgen</code> ein <code>ok</code>. Steht dort „FEHLT", bitte abbrechen und mir den Text schicken.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">03</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Auf dem zweiten Mac testen</span><span class="wer du">Du</span></div>
+        <p>Die neue DMG auf den zweiten Mac übertragen, installieren, öffnen. Beim ersten Start lädt das Suchmodell — etwa 2,3 GB, ein paar Minuten.</p>
+        <p class="fertig"><b>Fertig, wenn:</b> die Einführung erscheint, das Modell durchläuft und eine erste Suche Treffer liefert.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ===================== 2 ===================== -->
+<section class="phase">
+  <div class="phase-kopf">
+    <h2>2 · Die Suche messen</h2>
+    <span class="dauer">ca. 20 Min</span>
+  </div>
+  <p class="einleitung">
+    Der Abschnitt, den ich bisher immer nach hinten geschoben habe. Alles
+    Weitere ist Verpackung um eine Kernfunktion herum, deren Qualität noch nie
+    mit einer Zahl belegt wurde.
+  </p>
+
+  <ol class="schritte">
+    <li class="schritt">
+      <span class="nummer">04</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Zehn bis fünfzehn echte Suchen</span><span class="wer du">Du</span></div>
+        <p>Formuliere sie so, wie du sie im Alltag stellen würdest — also „Rechnung von der Werkstatt", nicht „Werkstatt Rechnung 2024". Vorher aufschreiben, was du erwartest, damit du dir die Frage nicht nachträglich passend machst.</p>
+        <p class="fertig"><b>Notiere je Suche:</b> steht das richtige Dokument unter den ersten fünf Treffern — ja oder nein.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">05</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Entscheiden</span><span class="wer du">Du</span></div>
+        <div class="entscheidung">
+          <div class="entscheidung-titel">Trefferquote → Vorgehen</div>
+          <div class="zweig gut">
+            <span class="quote">8 – 10 / 10</span>
+            <div><b>Veröffentlichen.</b> Das ist gut genug, um Leuten guten Gewissens zum Ausprobieren gegeben zu werden.</div>
+          </div>
+          <div class="zweig mittel">
+            <span class="quote">5 – 7 / 10</span>
+            <div><b>Veröffentlichen, aber ehrlich.</b> Ich formuliere die Erwartung auf der Website entsprechend um. Lieber jemand ist positiv überrascht als enttäuscht.</div>
+          </div>
+          <div class="zweig stopp">
+            <span class="quote">unter 5 / 10</span>
+            <div><b>Nicht veröffentlichen.</b> Dann kommt erst die Suchbegriff-Erweiterung, über die wir gesprochen haben — der Punkt, an dem aus „Rechnung Drucker" auch „Canon", „Toner", „Multifunktionsgerät" wird.</div>
+          </div>
+        </div>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ===================== 3 ===================== -->
+<section class="phase">
+  <div class="phase-kopf">
+    <h2>3 · Domain, Adresse, Postfach</h2>
+    <span class="dauer">ca. 1 Std, plus Wartezeit</span>
+  </div>
+  <p class="einleitung">
+    Vier Angaben, die nur von dir kommen können. Ohne sie stehen in App und
+    Website noch Platzhalter, die niemand anklicken kann.
+  </p>
+
+  <ol class="schritte">
+    <li class="schritt">
+      <span class="nummer">06</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Domain kaufen</span><span class="wer du">Du</span></div>
+        <p>Eine <code>.de</code>-Adresse kostet etwa 5 bis 15 € im Jahr. Die Website ist aktuell durchgängig auf <code>smartsearch-app.de</code> geschrieben — falls die vergeben ist, nimm was anderes, ich ändere das überall.</p>
+        <p>Achte darauf, dass beim Anbieter <b>E-Mail-Weiterleitung</b> dabei ist. Das erspart dir ein eigenes Postfach.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">07</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Rückmeldungs-Adresse einrichten</span><span class="wer du">Du</span></div>
+        <p>Eine Weiterleitung von <code>kontakt@deine-domain.de</code> auf dein normales Postfach genügt. Diese Adresse steht später im Rückmeldungs-Knopf der App und im Impressum.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">08</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Impressum-Anschrift festlegen</span><span class="wer du">Du</span></div>
+        <p>Hier gehört eine ladungsfähige Anschrift hin. Ohne Gewerbe ist das deine Wohnadresse — und die steht dann öffentlich im Netz, für jeden lesbar.</p>
+        <p>Wenn dir das unangenehm ist: Es gibt ladungsfähige Geschäftsadressen für wenige Euro im Monat. Das ist eine Entscheidung, die du bewusst treffen solltest, keine Formalie.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">09</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Die vier Angaben an mich</span><span class="wer du">Du</span></div>
+        <dl class="angaben">
+          <div><dt>Domain</dt><dd>z. B. <code>smartsearch-app.de</code></dd></div>
+          <div><dt>E-Mail-Adresse</dt><dd>für Rückmeldungen und Impressum</dd></div>
+          <div><dt>Anschrift</dt><dd>Name, Straße, PLZ, Ort</dd></div>
+          <div><dt>Trefferquote</dt><dd>das Ergebnis aus Schritt 04</dd></div>
+        </dl>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- ===================== 4 ===================== -->
+<section class="phase">
+  <div class="phase-kopf">
+    <h2>4 · Veröffentlichen</h2>
+    <span class="dauer">ca. 1 Std</span>
+  </div>
+  <p class="einleitung">
+    Ab hier übernehme ich, bis auf zwei Stellen, an denen ich dein Konto nicht
+    ersetzen kann.
+  </p>
+
+  <ol class="schritte">
+    <li class="schritt">
+      <span class="nummer">10</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Platzhalter ersetzen</span><span class="wer">Ich</span></div>
+        <p>Domain in acht Dateien, <code>PLATZHALTER_DOWNLOAD_URL</code> an zwei Stellen, Anschrift im Impressum, <code>RUECKMELDUNG_ADRESSE</code> in der App. Danach baust du noch einmal — die Adresse steckt fest im Programm.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">11</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Schriften selbst ausliefern</span><span class="wer">Ich</span></div>
+        <p>Die Website lädt derzeit Schriften von Google. Dabei geht die IP-Adresse jedes Besuchers an Google — dafür bräuchtest du eine Einwilligung, und deutsche Gerichte haben das schon abgemahnt. Ich lege die Schriftdateien stattdessen auf deinen Server, dann entfällt das Problem samt Cookie-Banner.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">12</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Website hochladen</span><span class="wer du">Du</span> <span class="wer">Ich</span></div>
+        <p>Vorschlag: GitHub Pages. Kostenlos, verträgt eigene Domains, liefert HTTPS mit, und du hast das Konto schon. Ich bereite alles vor; du klickst in den Repository-Einstellungen einmal auf „Pages" und trägst die Domain ein.</p>
+        <p class="fertig"><b>Fertig, wenn:</b> deine Domain die Startseite zeigt und Impressum, Datenschutz und Nutzungsbedingungen erreichbar sind.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">13</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Release 1.0.1, alte Fassung zurückziehen</span><span class="wer du">Du</span></div>
+        <p>Neues Release mit der geprüften DMG anlegen. Danach die <b>1.0.0 löschen oder als fehlerhaft markieren</b> — wer sie jetzt lädt, läuft in genau den Fehler, den wir gerade behoben haben.</p>
+      </div>
+    </li>
+
+    <li class="schritt">
+      <span class="nummer">14</span>
+      <div>
+        <div class="kopfzeile"><span class="titel">Update-Prüfung scharf schalten</span><span class="wer">Ich</span></div>
+        <p>In der App steht noch <code>https://example.com/smartsearch/version.json</code>. Ich lege die Datei auf deiner Domain ab und trage sie ein — sonst sucht jede installierte App still ins Leere und du kannst nie ein Update ankündigen.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<footer>
+  Nach Schritt 14 ist die App veröffentlicht. Was danach kommt — die
+  Suchbegriff-Erweiterung, Bedienung ohne Maus, ein Abo — sind eigene Vorhaben
+  und keine Voraussetzung für den Start.
+</footer>
+
+</div>

@@ -125,7 +125,7 @@ FENSTER_HOEHE = 440
 
 # ---------- VERSION & AUTO-UPDATE ----------
 # Bei jedem Release von Hand hochzählen (siehe pruefe_auf_updates()).
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 
 # Anschrift fuer Rueckmeldungen. Vor der Veroeffentlichung durch die
 # eigene Adresse ersetzen - am besten eine, die zur Domain gehoert.

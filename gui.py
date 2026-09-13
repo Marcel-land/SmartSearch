@@ -125,7 +125,7 @@ FENSTER_HOEHE = 440
 
 # ---------- VERSION & AUTO-UPDATE ----------
 # Bei jedem Release von Hand hochzählen (siehe pruefe_auf_updates()).
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 
 # Anschrift fuer Rueckmeldungen. Vor der Veroeffentlichung durch die
 # eigene Adresse ersetzen - am besten eine, die zur Domain gehoert.
@@ -146,6 +146,20 @@ RUECKMELDUNG_ADRESSE = "kontakt@smartsearch-app.com"
 # Abstand. Ein Zugangsschlüssel würde das Limit anheben, hat aber in einer
 # ausgelieferten App nichts zu suchen - er wäre auslesbar.
 GITHUB_RELEASES_API = "https://api.github.com/repos/Marcel-land/SmartSearch/releases/latest"
+
+# Wohin der "Herunterladen"-Knopf im Update-Fenster fuehrt.
+#
+# Bewusst die eigene Adresse und nicht die des Releases: Wer SmartSearch
+# benutzt, hat mit GitHub nichts zu tun und soll dort auch nicht landen.
+# smartsearch-app.com/SmartSearch.dmg leitet still zur Datei im neuesten
+# Release weiter (siehe website/_redirects) - sichtbar ist nur die eigene
+# Adresse, und der Download startet sofort.
+#
+# Die PRUEFUNG laeuft weiterhin ueber GitHub, nur der Knopf nicht. Das ist
+# kein Widerspruch: die Pruefung stellt ein Programm, und solche Anfragen
+# weist die Bot-Erkennung des Webhosters ab. Den Knopf klickt ein Mensch,
+# es oeffnet sich ein Browser - und Browser werden nicht abgewiesen.
+DOWNLOAD_ADRESSE = "https://smartsearch-app.com/SmartSearch.dmg"
 UPDATE_CHECK_TIMEOUT_SEK = 5
 
 DATEITYP_GRUPPEN = {
@@ -159,19 +173,6 @@ DATEITYP_GRUPPEN = {
 # Die Toene stehen in farben.py, zusammen mit den geprueften
 # Kontrastwerten gegen die weisse Schrift.
 BADGE_FARBEN = farben.BADGE_FARBEN
-
-
-def _download_adresse(release):
-    """Sucht im Release die DMG heraus - sonst die Release-Seite.
-
-    Die DMG-Adresse startet den Download unmittelbar. Fehlt sie (etwa weil
-    ein Release ohne Anhang veröffentlicht wurde), landet der Benutzer
-    wenigstens auf der Release-Seite und nicht im Nichts.
-    """
-    for anhang in release.get("assets") or []:
-        if (anhang.get("name") or "").lower().endswith(".dmg"):
-            return anhang.get("browser_download_url") or ""
-    return release.get("html_url") or ""
 
 
 def _release_notizen(text, max_zeilen=5, max_zeichen=400):
@@ -2152,7 +2153,7 @@ class SmartSearchNotchWindow(ctk.CTk):
                 # GitHub liefert die Markierung als "v1.0.3";
                 # _version_tuple() rechnet mit reinen Ziffern.
                 neueste_version = str(daten.get("tag_name", "")).strip().lstrip("vV")
-                download_url = _download_adresse(daten)
+                download_url = DOWNLOAD_ADRESSE
                 notizen = _release_notizen(daten.get("body", ""))
             except Exception as e:
                 if manuell:

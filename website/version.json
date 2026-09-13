@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "download_url": "https://github.com/Marcel-land/SmartSearch/releases/latest",
-  "notes": "Behebt einen Absturz beim Wechsel zwischen Fassungen."
+  "notes": "Der Downloadknopf fuehrt jetzt ueber smartsearch-app.com."
 }

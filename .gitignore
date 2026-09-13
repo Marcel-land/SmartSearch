@@ -30,3 +30,6 @@ app_ausgabe.txt
 _to_delete/
 
 .DS_Store
+
+# Von wrangler (Cloudflare-Upload) angelegt
+.wrangler/

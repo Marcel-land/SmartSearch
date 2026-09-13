@@ -131,18 +131,21 @@ APP_VERSION = "1.0.2"
 # eigene Adresse ersetzen - am besten eine, die zur Domain gehoert.
 RUECKMELDUNG_ADRESSE = "kontakt@smartsearch-app.com"
 
-# TODO (Marcel): Diese URL muss noch auf eine echte, von dir gehostete
-# JSON-Datei zeigen (z.B. über GitHub Pages/Releases oder deine eigene
-# Website) mit dem Format:
-#   {"version": "1.1.0", "download_url": "https://.../SmartSearch.dmg",
-#    "notes": "Kurzer Änderungstext"}
-# Bis dahin ist die Update-Prüfung ein funktionierendes Gerüst, das nur
-# ins Leere läuft (schlägt still fehl, siehe pruefe_auf_updates) - kein
-# waschechtes Sparkle-Auto-Update mit Download+Neustart, das würde ein
-# eigenes Framework + signierte Releases + einen Appcast-Feed brauchen.
-# Für den Anfang reicht dieser einfache "Hinweis + Link zum Download"-
-# Mechanismus völlig aus.
-UPDATE_CHECK_URL = "https://smartsearch-app.com/version.json"
+# Die Update-Prüfung fragt GitHub direkt nach dem neuesten Release.
+#
+# WARUM NICHT MEHR die eigene Website (bis 1.0.2: version.json): Sie liegt
+# hinter Cloudflare, und dessen Bot-Erkennung weist Anfragen mit dem
+# Standard-User-Agent von Python ("Python-urllib/...") mit HTTP 403 ab -
+# nachweislich auch dann, wenn die Browserintegritätsprüfung abgeschaltet
+# ist. Genau daran ist die Prüfung in Fassung 1.0.1 gescheitert, ohne dass
+# es auffiel: der Fehler wird im Hintergrund still verschluckt. GitHub
+# rechnet mit Programmen als Aufrufern und blockt sie nicht.
+#
+# Kostenlos und ohne Anmeldung. Das Limit liegt bei 60 Anfragen je Stunde
+# und IP-Adresse; die App fragt einmal pro Start, das reicht mit großem
+# Abstand. Ein Zugangsschlüssel würde das Limit anheben, hat aber in einer
+# ausgelieferten App nichts zu suchen - er wäre auslesbar.
+GITHUB_RELEASES_API = "https://api.github.com/repos/Marcel-land/SmartSearch/releases/latest"
 UPDATE_CHECK_TIMEOUT_SEK = 5
 
 DATEITYP_GRUPPEN = {
@@ -156,6 +159,63 @@ DATEITYP_GRUPPEN = {
 # Die Toene stehen in farben.py, zusammen mit den geprueften
 # Kontrastwerten gegen die weisse Schrift.
 BADGE_FARBEN = farben.BADGE_FARBEN
+
+
+def _download_adresse(release):
+    """Sucht im Release die DMG heraus - sonst die Release-Seite.
+
+    Die DMG-Adresse startet den Download unmittelbar. Fehlt sie (etwa weil
+    ein Release ohne Anhang veröffentlicht wurde), landet der Benutzer
+    wenigstens auf der Release-Seite und nicht im Nichts.
+    """
+    for anhang in release.get("assets") or []:
+        if (anhang.get("name") or "").lower().endswith(".dmg"):
+            return anhang.get("browser_download_url") or ""
+    return release.get("html_url") or ""
+
+
+def _release_notizen(text, max_zeilen=5, max_zeichen=400):
+    """Macht aus dem Release-Text von GitHub ein paar lesbare Zeilen.
+
+    Der Text ist Markdown und enthält neben den Änderungen oft auch
+    Installationshinweise. Im Hinweisfenster interessiert nur der Anfang:
+    alles ab einer Trennlinie (---) entfällt, Überschriften ebenso,
+    Aufzählungszeichen werden zu Punkten.
+
+    Zur Einrückung: Eine Zeile gilt nur dann als Fortsetzung der
+    vorherigen, wenn sie eingerückt ist UND darüber eine Aufzählung stand.
+    Ohne diese Bedingung würden fünf gleichwertige Absätze - so sieht der
+    Text von 1.0.2 aus - zu einem einzigen Klumpen zusammenlaufen.
+    """
+    zeilen = []
+    letzte_war_aufzaehlung = False
+
+    for rohzeile in (text or "").splitlines():
+        zeile = rohzeile.strip()
+        if zeile.startswith("---"):
+            break
+        if not zeile or zeile.startswith("#"):
+            letzte_war_aufzaehlung = False
+            continue
+
+        eingerueckt = rohzeile[:1] in (" ", "\t")
+        if zeile.startswith(("- ", "* ")):
+            if len(zeilen) >= max_zeilen:
+                break
+            zeilen.append("• " + zeile[2:])
+            letzte_war_aufzaehlung = True
+        elif eingerueckt and letzte_war_aufzaehlung and zeilen:
+            zeilen[-1] += " " + zeile
+        else:
+            if len(zeilen) >= max_zeilen:
+                break
+            zeilen.append(zeile)
+            letzte_war_aufzaehlung = False
+
+    ergebnis = "\n".join(zeilen)
+    if len(ergebnis) > max_zeichen:
+        ergebnis = ergebnis[:max_zeichen].rstrip() + " …"
+    return ergebnis
 
 
 def _version_tuple(v):
@@ -682,6 +742,7 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.check_toggle_loop()
         self.registriere_globalen_hotkey()
         self.pruefe_auf_updates(manuell=False)
+        self.pruefe_index_passt()
 
         if self.ist_erster_start:
             # Fenster aktiv zeigen (statt versteckt zu bleiben) und kurz
@@ -2054,7 +2115,7 @@ class SmartSearchNotchWindow(ctk.CTk):
     # ---------- AUTO-UPDATE ----------
 
     def pruefe_auf_updates(self, manuell=False):
-        """Fragt UPDATE_CHECK_URL nach der neuesten Version ab und zeigt
+        """Fragt GitHub nach dem neuesten Release ab und zeigt
         bei Bedarf einen Hinweis mit Download-Link.
 
         manuell=True: Nutzer hat aktiv auf "Nach Updates suchen" geklickt
@@ -2076,17 +2137,23 @@ class SmartSearchNotchWindow(ctk.CTk):
                 # ein HTTP 403, das in der Oberflaeche wie ein
                 # Netzwerkproblem aussah, obwohl die Verbindung stand.
                 anfrage = urllib.request.Request(
-                    UPDATE_CHECK_URL,
+                    GITHUB_RELEASES_API,
                     headers={
-                        "User-Agent": f"SmartSearch/{APP_VERSION} (macOS; +https://smartsearch-app.com)",
-                        "Accept": "application/json",
+                        # GitHub verlangt einen User-Agent und weist Anfragen
+                        # ohne einen ab. WELCHER es ist, ist ihnen egal -
+                        # anders als der Bot-Erkennung von Cloudflare.
+                        "User-Agent": f"SmartSearch/{APP_VERSION}",
+                        "Accept": "application/vnd.github+json",
                     },
                 )
                 with urllib.request.urlopen(anfrage, timeout=UPDATE_CHECK_TIMEOUT_SEK) as antwort:
                     daten = json.loads(antwort.read().decode("utf-8"))
-                neueste_version = str(daten.get("version", "")).strip()
-                download_url = daten.get("download_url", "")
-                notizen = daten.get("notes", "")
+
+                # GitHub liefert die Markierung als "v1.0.3";
+                # _version_tuple() rechnet mit reinen Ziffern.
+                neueste_version = str(daten.get("tag_name", "")).strip().lstrip("vV")
+                download_url = _download_adresse(daten)
+                notizen = _release_notizen(daten.get("body", ""))
             except Exception as e:
                 if manuell:
                     self.after(0, lambda e=e: self._update_fehlgeschlagen(e))
@@ -2099,12 +2166,41 @@ class SmartSearchNotchWindow(ctk.CTk):
 
         threading.Thread(target=_hintergrund, daemon=True).start()
 
+    def pruefe_index_passt(self):
+        """Prüft beim Start, ob der gespeicherte Index zum aktuellen
+        Suchmodell gehört - und stößt sonst den Neuaufbau an.
+
+        Hintergrund: Die Vektoren im Index stammen aus einem bestimmten
+        Modell (siehe MODELL_NAME und INDEX_FORMAT in search.py). Wechselt
+        das Modell, verwirft search.py den alten Index beim Laden. Ohne
+        diesen Hinweis stünde der Benutzer dann vor einer Suche, die
+        grundlos nichts findet.
+
+        Läuft im Hintergrund, weil dafür die Indexdatei gelesen wird - bei
+        einem großen Index dauert das einen Moment, und der Programmstart
+        soll nicht darauf warten.
+        """
+        def _hintergrund():
+            try:
+                fremd = smart_search.index_ist_fremd()
+            except Exception as e:
+                print(f"[Index] Prüfung fehlgeschlagen: {e}")
+                return
+            if fremd:
+                self.after(0, self._index_neuaufbau_ankuendigen)
+
+        threading.Thread(target=_hintergrund, daemon=True).start()
+
+    def _index_neuaufbau_ankuendigen(self):
+        messagebox.showinfo(t("index.rebuild_title"), t("index.rebuild_body"))
+        self.index_aktualisieren()
+
     def _update_fehlgeschlagen(self, fehler):
-        # Absichtlich NICHT pauschal "keine Internetverbindung" behaupten -
-        # solange UPDATE_CHECK_URL noch der Platzhalter ist (siehe Konstante
-        # oben im Code), schlägt die Prüfung IMMER fehl, unabhängig vom
-        # Internet. Das hat beim Testen sonst fälschlich nach einem
-        # Netzwerkproblem ausgesehen.
+        # Absichtlich NICHT pauschal "keine Internetverbindung" behaupten.
+        # Die Prüfung kann auch fehlschlagen, wenn das Netz steht: eine
+        # Störung bei GitHub, ein Sperrfilter im Firmennetz, ein
+        # überschrittenes Anfragelimit. Genau diese Fälle sahen beim Testen
+        # fälschlich nach einem Netzwerkproblem aus.
         messagebox.showinfo(
             t("update.check_failed_title"),
             t("update.check_failed_body", fehler=fehler),
@@ -2117,7 +2213,9 @@ class SmartSearchNotchWindow(ctk.CTk):
         self.attributes("-topmost", False)
         top = ctk.CTkToplevel(self)
         top.title(t("update.available_title"))
-        top.geometry("400x260")
+        # Ohne Änderungstext reichen 260 Pixel; mit einem längeren würden
+        # die Knöpfe sonst aus dem Fenster geschoben.
+        top.geometry("400x340" if len(notizen or "") > 160 else "400x260")
         top.attributes("-topmost", True)
         self.nebenfenster_anmelden(top)
         top.grab_set()

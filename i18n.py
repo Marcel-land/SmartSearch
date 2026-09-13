@@ -356,6 +356,8 @@ TRANSLATIONS = {
         "onboarding.status_skipped": "Einrichtung übersprungen. Fügen Sie bei Bedarf über »Ordner hinzufügen« einen Ordner hinzu.",
 
         # Updates
+        "index.rebuild_title": "Suchindex wird neu aufgebaut",
+        "index.rebuild_body": "Das Suchmodell hat sich mit dieser Fassung geändert. Der gespeicherte Index passt nicht mehr dazu und wird jetzt neu aufgebaut.\n\nSie können SmartSearch währenddessen weiter benutzen - bis der Aufbau durch ist, findet die Suche allerdings noch nicht alles.",
         "update.check_failed_title": "Update-Prüfung nicht möglich",
         "update.check_failed_body": "Es konnte nicht nach Updates gesucht werden.\n\nMöglich ist eine fehlende Internetverbindung, aber ebenso eine Störung auf unserer Seite. SmartSearch selbst arbeitet unabhängig davon normal weiter.\n\nMeldung: {fehler}",
         "update.up_to_date_title": "Keine neue Version",
@@ -600,6 +602,8 @@ TRANSLATIONS = {
         "onboarding.status_skipped": "Setup skipped. Add a folder via “Add folder” when needed.",
 
         # Updates
+        "index.rebuild_title": "Rebuilding the search index",
+        "index.rebuild_body": "The search model changed with this version. The stored index no longer matches it and is being rebuilt now.\n\nYou can keep using SmartSearch in the meantime - until the rebuild has finished, search will not find everything yet.",
         "update.check_failed_title": "Update check not possible",
         "update.check_failed_body": "Could not check for updates.\n\nThis may be a missing internet connection, but it may equally be a problem on our side. SmartSearch itself continues to work normally either way.\n\nMessage: {fehler}",
         "update.up_to_date_title": "No new version",

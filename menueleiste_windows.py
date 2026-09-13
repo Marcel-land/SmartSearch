@@ -9,7 +9,8 @@ Gleiche Aufgaben, andere Technik:
     Lupe in der Menueleiste          Symbol im Infobereich (neben der Uhr)
     NSStatusBar (PyObjC)             pystray
     Cmd+Shift+F ueber NSEvent        Strg+Shift+F ueber RegisterHotKey
-    Dock-Symbol, Aktivierung         macht Windows/Tk von allein
+    Dock-Symbol                      Symbol in der Taskleiste
+    Aktive Anwendung (NSApp)         Vordergrundfenster + Prozesskennung
 
 Die Funktionsnamen sind absichtlich identisch mit denen in
 menueleiste_mac.py - gui.py importiert je nach System die eine oder die
@@ -147,3 +148,94 @@ def laufende_instanz_aktivieren():
     gui.py (dieselbe Loesung wie der Mac-Ausweichweg) - hier gibt es kein
     Gegenstueck zur Bundle-Kennung von macOS."""
     return False
+
+
+# ------------------------------------------------------ Gegenstuecke zum Mac
+# Diese drei Funktionen ruft gui.py seit Fassung 1.0.2 auf. Sie sind dort
+# jeweils mit hasattr() abgesichert - fehlen sie, laeuft das Programm also
+# weiter, verliert aber stillschweigend Verhalten. Deshalb hier die
+# Windows-Entsprechungen.
+
+# Kennung, unter der Windows dieses Programm fuehrt. Aufbau ist Konvention:
+# Hersteller.Produkt, ohne Leerzeichen, stabil ueber alle Fassungen hinweg -
+# aendert sie sich, behandelt Windows das Programm als ein anderes und
+# vergisst angeheftete Verknuepfungen.
+ANWENDUNGSKENNUNG = "SmartSearch.Desktop"
+
+
+def app_ist_aktiv():
+    """Liegt gerade ein Fenster DIESES Programms im Vordergrund?
+
+    gui.py fragt das regelmaessig ab und achtet auf die Flanke
+    "nicht aktiv -> aktiv": genau dann hat der Benutzer SmartSearch ueber
+    die Taskleiste, Alt+Tab oder das Infobereich-Symbol zurueckgeholt, und
+    das versteckte Fenster soll wieder erscheinen. Ohne diese Funktion ist
+    das Fenster unter Windows nur ueber das Symbol im Infobereich oder den
+    Tastenkurzbefehl erreichbar.
+
+    Windows kennt keinen Programm-, sondern nur einen Fensterbegriff.
+    Ermittelt wird deshalb das Vordergrundfenster und geprueft, ob es zu
+    unserem Prozess gehoert.
+
+    Rueckgabe:
+        True/False - Zustand sicher ermittelt
+        None       - nicht ermittelbar; gui.py laesst den Zustand dann
+                     unveraendert, statt das Fenster faelschlich zu zeigen.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except Exception:
+        return None
+
+    try:
+        user32 = ctypes.windll.user32
+        fenster = user32.GetForegroundWindow()
+        if not fenster:
+            # Kein Vordergrundfenster - z.B. waehrend eines Anmeldedialogs.
+            return False
+        prozess = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(fenster, ctypes.byref(prozess))
+        return prozess.value == os.getpid()
+    except Exception as e:
+        print(f"[Vordergrund] Zustand nicht ermittelbar: {e}")
+        return None
+
+
+def programmnamen_setzen(name="SmartSearch"):
+    """Meldet dem System eine eigene Anwendungskennung an.
+
+    Auf dem Mac steht an dieser Stelle der Name im Anwendungsmenue. Unter
+    Windows gibt es dieses Menue nicht; die entsprechende Stelle ist die
+    Taskleiste. Ohne eigene Kennung ordnet Windows das Fenster dem
+    ausfuehrenden Programm zu - also Python - und zeigt dessen Symbol
+    statt unserem. Das ist dasselbe Problem wie die Python-Rakete im Dock
+    auf dem Mac, nur an anderer Stelle.
+
+    Muss VOR dem ersten Fenster aufgerufen werden; genau dort steht der
+    Aufruf in gui.py.
+
+    Der uebergebene Name wird bewusst nicht in die Kennung eingebaut: sie
+    muss ueber alle Fassungen hinweg gleich bleiben (siehe
+    ANWENDUNGSKENNUNG).
+    """
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ANWENDUNGSKENNUNG)
+    except Exception as e:
+        print(f"[Taskleiste] Anwendungskennung nicht gesetzt: {e}")
+
+
+def aus_dem_dock_nehmen():
+    """Ohne Entsprechung unter Windows - bewusst leer.
+
+    Auf dem Mac blendet gui.py beim Beenden das Dock-Symbol aus, damit
+    waehrend des Herunterfahrens nicht kurz das falsche Symbol steht.
+    Unter Windows verschwindet der Taskleisten-Eintrag zusammen mit dem
+    Fenster, es gibt nichts abzumelden.
+
+    Die Funktion existiert trotzdem, damit beide Systeme dieselbe
+    Schnittstelle haben und in gui.py kein "wenn Windows, dann..." noetig
+    ist.
+    """
+    return

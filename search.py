@@ -49,6 +49,18 @@ STOPWOERTER = {
 
 MODELL_NAME = "BAAI/bge-m3"
 
+# Formatstand der Indexdatei. Wird hochgezaehlt, wenn sich der AUFBAU eines
+# Eintrags aendert - nicht bei jeder Programmfassung.
+#
+# WARUM es das ueberhaupt gibt: Die Vektoren im Index stammen aus einem
+# bestimmten Modell und sind nur mit Vektoren DESSELBEN Modells
+# vergleichbar. Wird MODELL_NAME gewechselt - das ist bereits zweimal
+# passiert - liefert ein alter Index keine Fehlermeldung, sondern
+# stillschweigend falsche Treffer. Deshalb stehen Modellname und
+# Formatstand seit Format 2 mit in der Datei und werden beim Laden
+# geprueft. Passt etwas nicht, wird der Index verworfen und neu gebaut.
+INDEX_FORMAT = 2
+
 # Score-Schwelle für suche_intern(): Treffer unterhalb dieses kombinierten
 # Semantik+Keyword-Scores werden verworfen. Empirisch ermittelt (v3.x):
 # alles darunter waren in Tests fast immer thematisch irrelevante Treffer.
@@ -448,11 +460,69 @@ def in_abschnitte_teilen(text, groesse=ABSCHNITT_GROESSE, ueberlappung=ABSCHNITT
         return abschnitte
 
 
+# Wird auf True gesetzt, sobald ein nicht passender Index verworfen wurde -
+# damit die Oberflaeche einmal darauf hinweisen kann statt gar nicht.
+_index_verworfen = False
+
+
+def _index_datei_lesen():
+    """Liest index.pkl und gibt (eintraege, passend) zurueck.
+
+    passend ist False, wenn die Datei mit einem anderen Modell oder in
+    einem aelteren Format geschrieben wurde. Die Eintraege werden trotzdem
+    mitgegeben; was damit geschieht, entscheidet der Aufrufer.
+    """
+    with open(INDEX_FILE, "rb") as f:
+        inhalt = pickle.load(f)
+
+    if isinstance(inhalt, dict) and "eintraege" in inhalt:
+        passend = (inhalt.get("format") == INDEX_FORMAT
+                   and inhalt.get("modell") == MODELL_NAME)
+        return inhalt.get("eintraege") or [], passend
+
+    # Format 1: eine nackte Liste ohne jede Angabe zum Modell. Womit sie
+    # gebaut wurde, ist nicht mehr feststellbar - also nicht verwendbar.
+    return (inhalt if isinstance(inhalt, list) else []), False
+
+
+def index_ist_fremd():
+    """True, wenn eine Indexdatei da ist, die nicht zum aktuellen Modell passt.
+
+    Die Oberflaeche fragt das beim Start ab, um einmal darauf hinzuweisen
+    und die Neuindexierung anzustossen - sonst stuende der Benutzer vor
+    einer Suche, die grundlos nichts findet.
+    """
+    if not os.path.exists(INDEX_FILE):
+        return False
+    try:
+        _, passend = _index_datei_lesen()
+        return not passend
+    except Exception:
+        # Unlesbare Datei: wird beim naechsten Indexlauf ohnehin ersetzt.
+        return True
+
+
 def lade_bestehenden_index():
-    if os.path.exists(INDEX_FILE):
-        with open(INDEX_FILE, "rb") as f:
-            return pickle.load(f)
-    return []
+    """Die gespeicherten Eintraege - oder eine leere Liste, wenn der Index
+    nicht zum aktuellen Suchmodell passt.
+
+    Leer heisst fuer die Indexierung: alles neu einlesen. Genau das ist
+    gewollt, denn Vektoren aus einem anderen Modell sind unbrauchbar.
+    """
+    global _index_verworfen
+    if not os.path.exists(INDEX_FILE):
+        return []
+    try:
+        eintraege, passend = _index_datei_lesen()
+    except Exception as e:
+        print(f"[Index] Datei nicht lesbar, wird neu aufgebaut: {e}")
+        return []
+    if not passend:
+        if not _index_verworfen:
+            print(f"[Index] Passt nicht zum Modell {MODELL_NAME} - wird neu aufgebaut.")
+        _index_verworfen = True
+        return []
+    return eintraege
 
 
 def speichere_index(eintraege):
@@ -466,10 +536,20 @@ def speichere_index(eintraege):
     sehen immer entweder die alte oder die neue vollständige Datei, nie
     einen Zwischenzustand.
     """
+    global _index_verworfen
+
+    # Modellname und Formatstand wandern mit in die Datei - siehe
+    # INDEX_FORMAT oben.
+    inhalt = {
+        "format": INDEX_FORMAT,
+        "modell": MODELL_NAME,
+        "eintraege": eintraege,
+    }
     temp_pfad = INDEX_FILE + ".tmp"
     with open(temp_pfad, "wb") as f:
-        pickle.dump(eintraege, f)
+        pickle.dump(inhalt, f)
     os.replace(temp_pfad, INDEX_FILE)
+    _index_verworfen = False
 
 
 # Punkt 16 der Liste: sehr grosse Dateien. Eine einzelne 500-MB-PDF kann
@@ -918,8 +998,11 @@ def _index_mit_matrix():
         if _such_cache is not None and _such_cache[0] == kennung:
             return _such_cache[1], _such_cache[2]
 
-        with open(INDEX_FILE, "rb") as f:
-            eintraege = pickle.load(f)
+        eintraege, passend = _index_datei_lesen()
+        if not passend:
+            # Fremder Index: lieber keine Treffer als falsche. Der naechste
+            # Indexlauf baut ihn neu auf.
+            return [], None
 
         # Eintraege ohne Vektor (z.B. Dateien, die beim Indexieren nicht
         # gelesen werden konnten) lassen sich nicht durchsuchen.

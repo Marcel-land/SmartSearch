@@ -8,6 +8,19 @@
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+import pathlib
+import re
+
+# Die Versionsnummer steht an genau EINER Stelle: APP_VERSION in gui.py.
+# Sie hier ein zweites Mal zu pflegen ging schief - bis Fassung 1.0.2 stand
+# im Info.plist durchgehend "1.0.1", weil beim Hochzaehlen nur gui.py
+# angefasst wurde. Der Finder und spaeter auch die Beglaubigung durch Apple
+# lesen aber genau diesen Wert.
+APP_VERSION = re.search(
+    r'APP_VERSION\s*=\s*"([^"]+)"',
+    pathlib.Path("gui.py").read_text(encoding="utf-8"),
+).group(1)
+
 # torchgen gehoert zu PyTorch und wird beim Laden eines Modells nachgeladen.
 # Es stand hier frueher unter excludes, weil der Name nach Testcode aussieht -
 # das war falsch: auf einem Rechner ohne separat installiertes PyTorch fehlte
@@ -111,8 +124,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'SmartSearch',
         'CFBundleDisplayName': 'SmartSearch',
-        'CFBundleShortVersionString': '1.0.1',
-        'CFBundleVersion': '1.0.1',
+        'CFBundleShortVersionString': APP_VERSION,
+        'CFBundleVersion': APP_VERSION,
         'NSHighResolutionCapable': True,
         # Ohne LSUIElement=False taucht die App nicht normal im Dock auf.
         'LSUIElement': False,

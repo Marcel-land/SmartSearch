@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "download_url": "https://github.com/Marcel-land/SmartSearch/releases/latest",
-  "notes": "Fehlerbehebungen und eine ueberarbeitete Farbgebung."
+  "notes": "Zuverlaessigkeit: Suchindex und Update-Pruefung."
 }

@@ -41,10 +41,31 @@ import ocr
 
 UNTERSTUETZT = (".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx")
 
+# Woerter, die nichts ueber den Inhalt aussagen und deshalb nicht als
+# Suchwort zaehlen. Die Liste war lange auf Artikel und die haeufigsten
+# Praepositionen beschraenkt - zu wenig, sobald jemand eine Frage stellt
+# statt Stichworte einzutippen. Bei "Versicherung fuers Auto" zaehlte
+# "fuers" als drittes Suchwort; da es in keinem Dokument steht, kam die
+# Kfz-Versicherung nur auf ein Drittel der Stichwortwertung. Gemessen am
+# 14.09.2026: dadurch blieb von drei passenden Dokumenten eines uebrig.
 STOPWOERTER = {
+    # Artikel und Pronomen
     "der", "die", "das", "den", "dem", "des", "ein", "eine", "einer", "eines",
-    "und", "oder", "für", "von", "mit", "auf", "im", "in", "zu", "zur", "zum",
-    "ist", "sind", "war", "waren", "als", "am", "an", "bei", "aus", "nach",
+    "ich", "mir", "mich", "mein", "meine", "meinen", "meiner", "meinem",
+    "es", "er", "sie", "wir", "ihr", "man", "sich", "denen",
+    # Fragewoerter
+    "was", "wer", "wie", "wo", "wann", "warum", "wieso", "welche", "welcher",
+    "welches", "welchen",
+    # Praepositionen, auch die verschmolzenen Formen
+    "und", "oder", "für", "fürs", "von", "vom", "mit", "auf", "im", "in",
+    "zu", "zur", "zum", "um", "ums", "über", "unter", "vor", "seit", "ohne",
+    "gegen", "durch", "bei", "aus", "nach", "rund",
+    # Hilfs- und Modalverben
+    "ist", "sind", "war", "waren", "habe", "hab", "hatte", "haben", "werde",
+    "wird", "wurde", "kann", "soll", "muss", "möchte",
+    # Fuellwoerter
+    "als", "am", "an", "dass", "damit", "auch", "nur", "sehr", "noch", "mehr",
+    "schon", "etwas", "alle", "alles", "jeden", "jede", "jedes", "jeder",
 }
 
 MODELL_NAME = "BAAI/bge-m3"
@@ -81,38 +102,61 @@ INDEX_META_FILE = INDEX_FILE + ".meta.json"
 # alles darunter waren in Tests fast immer thematisch irrelevante Treffer.
 SCORE_SCHWELLE = 0.15
 
-# BGE-M3 liefert selbst fuer voellig unverwandte Texte noch Werte um 0.6.
-# Die absolute Schwelle oben greift daher praktisch nie, und bei einer
-# Anfrage, zu der es nichts Passendes gibt, wurden trotzdem drei beliebige
-# Dokumente angezeigt. Zwei zusaetzliche Regeln fangen das ab:
+# ------------------------------------------------------------------
+# ALLE WERTE HIER UNTEN SIND GEMESSEN, NICHT GESCHAETZT.
 #
+# Am 14.09.2026 wurden zwoelf Anfragen gegen die zehn Demo-Dokumente
+# durchgerechnet und fuer JEDES Dokument der rohe Aehnlichkeitswert
+# festgehalten (such_diagnose.py erzeugt diese Tabelle jederzeit neu).
+# Ergebnis der alten Einstellung: von den erwarteten Treffern fehlten
+# elf. "Verträge", "Drucker", "Waschmaschine" und "Spende fuer die
+# Steuererklaerung" ergaben ueberhaupt nichts, obwohl fuer jede dieser
+# Anfragen ein eindeutig passendes Dokument im Index liegt.
+#
+# Die Ursache war eine falsche Annahme ueber das Modell: die frueheren
+# Kommentare gingen von Werten um 0,6 fuer unverwandte und bis 0,82 fuer
+# sehr aehnliche Texte aus. Gemessen liegt der gesamte Wertebereich auf
+# diesen Dokumenten zwischen 0,30 und 0,64 - passende Dokumente bei
+# 0,49 bis 0,57, unverwandte bei 0,30 bis 0,47. Alle Grenzen standen
+# also ueber dem Bereich, in dem die richtigen Antworten liegen.
+#
+# Mit den Werten unten und der Wortform-Erkennung in _wort_trifft()
+# wird in derselben Messung jeder erwartete Treffer gefunden.
+# ------------------------------------------------------------------
+
 # 1. Enthaelt ein Dokument KEINES der Suchwoerter woertlich, muss es
-#    semantisch ueberzeugen. Der Wert ist bewusst nicht zu hoch angesetzt:
-#    Ein Dokument zu finden, in dem das gesuchte Wort GAR NICHT vorkommt,
-#    ist der eigentliche Zweck dieser Anwendung - wer "Drucker" sucht, soll
-#    auch die Rechnung finden, auf der "Multifunktionssystem" steht. Eine
-#    strenge Sperre wuerde genau das verhindern.
-SEMANTIK_MINDEST_OHNE_TREFFER = 0.60
+#    semantisch ueberzeugen. Ein Dokument zu finden, in dem das gesuchte
+#    Wort GAR NICHT vorkommt, ist der eigentliche Zweck dieser Anwendung -
+#    wer "Drucker" sucht, soll auch die Rechnung finden, auf der
+#    "Multifunktionssystem" steht. Genau dieser Fall scheiterte vorher:
+#    die Rechnung kam auf 0,417 und lag damit unter der alten Sperre von
+#    0,60. Der neue Wert liegt unter allen gemessenen richtigen Treffern
+#    und ueber dem, was das Modell fuer voellig fremde Texte liefert.
+SEMANTIK_MINDEST_OHNE_TREFFER = 0.40
 
-# Nutzbarer Wertebereich von BGE-M3. Alles unterhalb der Untergrenze ist
-# erfahrungsgemaess thematisch unverwandt, oberhalb der Obergrenze liegen
-# nur noch nahezu identische Texte. Auf diesen Bereich wird der rohe
-# Aehnlichkeitswert gespreizt, bevor er mit der Stichwortwertung
-# verrechnet wird.
-SEMANTIK_UNTERGRENZE = 0.42
-SEMANTIK_OBERGRENZE = 0.82
+# Nutzbarer Wertebereich des Modells auf echten Dokumenten. Auf diesen
+# Bereich wird der rohe Aehnlichkeitswert gespreizt, bevor er mit der
+# Stichwortwertung verrechnet wird. Stimmt der Bereich nicht, wird die
+# Semantik rechnerisch kleingehalten und die woertliche Suche gewinnt
+# immer - vorher lag die Spreizung bei 0,42 bis 0,82, also fast
+# vollstaendig oberhalb der tatsaechlichen Werte.
+SEMANTIK_UNTERGRENZE = 0.32
+SEMANTIK_OBERGRENZE = 0.62
 
-# Verhaeltnis von inhaltlicher zu woertlicher Uebereinstimmung. Die
-# Stichwortwertung wiegt bewusst schwer: wer "Rechnung" eintippt und ein
-# Dokument hat dieses Wort woertlich, erwartet es weit oben - unabhaengig
-# davon, wie aehnlich das Modell andere Dokumente findet.
-GEWICHT_SEMANTIK = 0.55
-GEWICHT_STICHWORT = 0.45
-#
+# Verhaeltnis von inhaltlicher zu woertlicher Uebereinstimmung. Wer ein
+# Wort eintippt, das woertlich im Dokument steht, erwartet es weit oben -
+# deshalb wiegt die Stichwortwertung weiter mit. Sie darf aber nicht so
+# schwer wiegen, dass ein woertlicher Treffer alle sinngemaessen
+# Treffer aus der Liste draengt: genau das passierte bei 0,45.
+GEWICHT_SEMANTIK = 0.65
+GEWICHT_STICHWORT = 0.35
+
 # 2. Alles, was klar hinter dem besten Treffer zurueckbleibt, fliegt raus.
 #    Selbstjustierend: bei einer guten Anfrage bleiben mehrere Treffer
-#    stehen, bei einer schlechten nur der beste - oder gar keiner.
-RELATIVER_ABSTAND = 0.75
+#    stehen, bei einer schlechten nur der beste - oder gar keiner. Diese
+#    Regel erledigt die eigentliche Auslese; die absoluten Schwellen oben
+#    halten nur noch offensichtlichen Unsinn fern.
+RELATIVER_ABSTAND = 0.65
 
 # Ordnernamen, die NIE mitindexiert werden sollen, egal wo sie im
 # durchsuchten Ordnerbaum auftauchen. Das sind App-eigene/Bibliotheks-
@@ -901,6 +945,90 @@ def anfrage_woerter(anfrage):
     return [w for w in rohe_woerter if len(w) > 2 and w not in STOPWOERTER]
 
 
+def _entumlaute(wort):
+    return (wort.replace("ä", "a").replace("ö", "o")
+                .replace("ü", "u").replace("ß", "ss"))
+
+
+# Nur echte Mehrzahl-Endungen. "er" steht bewusst nicht dabei, ausser das
+# Wort traegt einen Umlaut ("Buecher" -> "Buch", "Haeuser" -> "Haus"):
+# sonst wuerde aus "Drucker" der Stamm "Druck", und die Suche faende
+# jedes Dokument mit "Anlagendruck". Gemessen am 14.09.2026 war genau
+# das der Fall. Geprueft wird das in test_wortformen.py.
+_MEHRZAHL_ENDUNGEN = ("en", "e", "n", "s")
+
+
+def wortformen(wort):
+    """Das Suchwort und eine vorsichtig gebildete Grundform dazu.
+
+    Deutsch beugt und setzt zusammen, die Suche darf daran nicht
+    scheitern. Ohne diese Funktion fand "Verträge" KEIN einziges
+    Dokument, waehrend "Vertrag" vier fand - der Unterschied war das
+    Mehrzahl-e. Fuer eine Kanzlei, die "Kuendigungen" oder "Vollmachten"
+    eintippt, waere das der Punkt, an dem sie das Programm weglegt.
+
+    Bewusst kein richtiger Stemmer: eine Bibliothek dafuer waere eine
+    weitere Abhaengigkeit im Bundle, und die vier Endungen unten decken
+    ab, was in Suchanfragen tatsaechlich vorkommt.
+    """
+    formen = {wort, _entumlaute(wort)}
+    hat_umlaut = any(z in wort for z in "äöü")
+    endungen = ("er",) + _MEHRZAHL_ENDUNGEN if hat_umlaut else _MEHRZAHL_ENDUNGEN
+    # Wie kurz der Stamm sein darf. Bei einem Umlaut im Suchwort ist die
+    # Mehrzahl gesichert ("Buecher", "Haeuser", "Baende") und der Stamm
+    # darf vier Zeichen haben. Ohne Umlaut bleibt es bei fuenf: sonst
+    # wuerde aus "kosten" der Stamm "kost" und die Suche faende
+    # "Kostuem", aus "planen" wuerde "plan" und sie faende "Planet".
+    mindest_stamm = 4 if hat_umlaut else 5
+    if len(wort) >= 6:
+        for endung in endungen:
+            if not wort.endswith(endung):
+                continue
+            # Die erste passende Endung ist die richtige, und zwar auch
+            # dann, wenn der Stamm danach zu kurz ist. Frueher lief die
+            # Schleife in diesem Fall weiter und probierte die naechste,
+            # kuerzere Endung: aus "planen" wurde ueber die Endung "n"
+            # der Stamm "plane", und die Suche fand "Planet". Richtig ist
+            # die Endung "en" - der Stamm "plan" waere zu kurz, also
+            # bleibt es bei der Anfrage selbst.
+            if len(wort) - len(endung) >= mindest_stamm:
+                stamm = wort[: -len(endung)]
+                formen.add(stamm)
+                formen.add(_entumlaute(stamm))
+            break
+    return {f for f in formen if len(f) >= 4}
+
+
+def wort_trifft(wort, heuhaufen):
+    """Steht das Suchwort (oder seine Grundform) im Text?
+
+    Verlangt eine Wortgrenze an mindestens EINEM Ende. Das ist der
+    Mittelweg zwischen zwei Fehlern:
+
+    - Ein reiner Teilstring-Vergleich, wie er hier frueher stand, fand
+      "Auto" in "Waschvollautomat". Bei der Anfrage "Auto" war die
+      Garantie fuer die Waschmaschine deshalb der einzige woertliche
+      Treffer, und die Kfz-Versicherung fiel hinten runter.
+    - Ein Vergleich auf ganze Woerter wuerde "Vertrag" nicht mehr in
+      "Mietvertrag" finden - und zusammengesetzte Woerter sind im
+      Deutschen die Regel, nicht die Ausnahme.
+
+    Wortanfang oder Wortende zu verlangen loest beides: "mietvertrag"
+    endet auf "vertrag", "vertragskonto" faengt damit an,
+    "waschvollautomat" hat "auto" nur mittendrin.
+    """
+    if not heuhaufen:
+        return False
+    for form in wortformen(wort):
+        for treffer in re.finditer(re.escape(form), heuhaufen):
+            anfang, ende = treffer.start(), treffer.end()
+            am_wortanfang = anfang == 0 or not heuhaufen[anfang - 1].isalnum()
+            am_wortende = ende >= len(heuhaufen) or not heuhaufen[ende].isalnum()
+            if am_wortanfang or am_wortende:
+                return True
+    return False
+
+
 def _zeitraum_cutoff(zeitraum):
     """Wandelt eine Zeitraum-Auswahl der GUI in einen Unix-Timestamp um,
     ab dem eine Datei als 'im Zeitraum' gilt. None = kein Filter.
@@ -1201,10 +1329,10 @@ def suche_intern(anfrage, top_n=10, ausgeschlossene_typen=None, zeitraum=None):
         im_dateinamen = 0
         if such_woerter:
             for w in such_woerter:
-                if w in dateiname:
+                if wort_trifft(w, dateiname):
                     gefundene_woerter += 1
                     im_dateinamen += 1
-                elif w in gesamttext:
+                elif wort_trifft(w, gesamttext):
                     gefundene_woerter += 1
 
         # Semantik auf 0..1 spreizen. BGE-M3 liefert selbst fuer voellig
@@ -1249,6 +1377,27 @@ def suche_intern(anfrage, top_n=10, ausgeschlossene_typen=None, zeitraum=None):
 
 
 
+def _fundstellen(text_klein, such_woerter):
+    """Alle Stellen, an denen ein Suchwort oder seine Grundform steht.
+
+    Nutzt dieselbe Regel wie wort_trifft(): Wortgrenze an mindestens
+    einem Ende. Sonst wuerde die Einfaerbung etwas anderes zeigen als
+    das, was den Treffer ausgemacht hat - bei "Verträge" bliebe der
+    Ausschnitt unmarkiert, obwohl "Mietvertrag" der Grund fuer den
+    Treffer war.
+    """
+    stellen = []
+    for wort in such_woerter or []:
+        for form in wortformen(wort.lower()):
+            for treffer in re.finditer(re.escape(form), text_klein):
+                anfang, ende = treffer.start(), treffer.end()
+                am_wortanfang = anfang == 0 or not text_klein[anfang - 1].isalnum()
+                am_wortende = ende >= len(text_klein) or not text_klein[ende].isalnum()
+                if am_wortanfang or am_wortende:
+                    stellen.append((anfang, ende))
+    return stellen
+
+
 def ausschnitt_mit_fundstellen(text, such_woerter, laenge=170):
     """Schneidet einen Textausschnitt RUND UM die erste Fundstelle heraus
     und meldet, wo darin die Suchwoerter stehen.
@@ -1273,16 +1422,7 @@ def ausschnitt_mit_fundstellen(text, such_woerter, laenge=170):
     # meist schon im Briefkopf, "Canon" aber erst in der Positionszeile -
     # der Ausschnitt zeigte dann den Briefkopf statt der eigentlichen
     # Fundstelle.
-    alle_stellen = []
-    for wort in such_woerter or []:
-        wort_klein = wort.lower()
-        von = 0
-        while True:
-            pos = text_klein.find(wort_klein, von)
-            if pos == -1:
-                break
-            alle_stellen.append(pos)
-            von = pos + 1
+    alle_stellen = [a for a, _ in _fundstellen(text_klein, such_woerter)]
 
     erste = None
     if alle_stellen:
@@ -1317,17 +1457,7 @@ def ausschnitt_mit_fundstellen(text, such_woerter, laenge=170):
             versatz = start
 
     # Alle Vorkommen im fertigen Ausschnitt einsammeln.
-    stellen = []
-    ausschnitt_klein = ausschnitt.lower()
-    for wort in such_woerter or []:
-        wort_klein = wort.lower()
-        von = 0
-        while True:
-            pos = ausschnitt_klein.find(wort_klein, von)
-            if pos == -1:
-                break
-            stellen.append((pos, pos + len(wort_klein)))
-            von = pos + 1
+    stellen = _fundstellen(ausschnitt.lower(), such_woerter)
 
     # Ueberlappungen zusammenfassen, damit die Einfaerbung sauber bleibt.
     stellen.sort()

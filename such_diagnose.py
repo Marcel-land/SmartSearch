@@ -80,10 +80,19 @@ def hauptteil():
             gesamttext = " ".join(e.get("text", "") for _, e in abschnitte).lower()
             gefunden = 0
             im_namen = 0
+            # WICHTIG: dieselbe Pruefung wie in search.suche_intern().
+            # Hier stand frueher ein einfaches "w in text". Damit hat die
+            # Diagnose etwas anderes gemessen als die Suche tatsaechlich
+            # tut: "Vertraege" galt hier als nicht gefunden, obwohl die
+            # Suche ueber die Grundform "Vertrag" sehr wohl trifft, und
+            # "Auto" galt als gefunden, obwohl es nur in
+            # "Waschvollautomat" mitten im Wort steckt. Wer die Grenzwerte
+            # nach so einer Tabelle einstellt, stellt sie nach falschen
+            # Zahlen ein.
             for w in woerter:
-                if w in dateiname:
+                if s.wort_trifft(w, dateiname):
                     gefunden += 1; im_namen += 1
-                elif w in gesamttext:
+                elif s.wort_trifft(w, gesamttext):
                     gefunden += 1
 
             sem_norm = (bester - s.SEMANTIK_UNTERGRENZE) / (

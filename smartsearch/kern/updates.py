@@ -28,7 +28,7 @@ from smartsearch import version
 # und IP-Adresse; die App fragt einmal pro Start, das reicht mit großem
 # Abstand. Ein Zugangsschlüssel würde das Limit anheben, hat aber in einer
 # ausgelieferten App nichts zu suchen - er wäre auslesbar.
-GITHUB_RELEASES_API = "https://api.github.com/repos/Marcel-land/SmartSearch/releases/latest"
+GITHUB_RELEASES_API = "https://api.github.com/repos/smartsearch-app/SmartSearch/releases/latest"
 
 # Wohin der "Herunterladen"-Knopf im Update-Fenster fuehrt.
 #

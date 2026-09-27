@@ -17,7 +17,7 @@ Stand: 27.09.2026. Bisher nur für den Mac, Windows folgt.
 
 ## Updateprüfung
 
-Die App fragt `api.github.com/repos/Marcel-land/SmartSearch/releases/latest` ab und vergleicht `tag_name` mit `version.APP_VERSION` (siehe `kern/updates.py`). Deshalb muss das Tag die Form `v1.2.3` haben.
+Die App fragt `api.github.com/repos/smartsearch-app/SmartSearch/releases/latest` ab und vergleicht `tag_name` mit `version.APP_VERSION` (siehe `kern/updates.py`). Deshalb muss das Tag die Form `v1.2.3` haben.
 
 Zum Testen des Hinweisfensters ohne neues Release:
 

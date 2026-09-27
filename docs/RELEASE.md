@@ -12,7 +12,7 @@ Stand: 27.09.2026. Bisher nur für den Mac, Windows folgt.
 6. **Release auf GitHub** anlegen:
    - Tag `vX.Y.Z`, Ziel `main`.
    - Das DMG muss **exakt `SmartSearch.dmg`** heißen. Der Downloadknopf der Website leitet auf `…/releases/latest/download/SmartSearch.dmg` weiter, bei einem anderen Namen läuft er ins Leere.
-7. **Website hochladen:** im Website-Ordner `npx wrangler@latest pages deploy website --project-name=smartsearch`.
+7. **Website hochladen:** `cd ~/Projekt/SmartSearch/Webseite && npx wrangler@latest pages deploy website --project-name=smartsearch`. Die Website liegt neben dem App-Ordner, nicht im Repository.
 8. **Kontrollieren:** Die Website mit angehängtem `?x=1` aufrufen. Ohne das zeigt der Browser eine zwischengespeicherte Fassung.
 
 ## Updateprüfung

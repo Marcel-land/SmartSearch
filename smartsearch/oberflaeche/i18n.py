@@ -4,69 +4,45 @@ i18n.py - Übersetzungsmodul für SmartSearch (Deutsch / Englisch).
 
 Funktionsweise:
 - Alle Nutzer-sichtbaren Texte liegen hier als Key -> Text in
-  TRANSLATIONS["de"] bzw. TRANSLATIONS["en"]. gui.py referenziert nur noch
+  TRANSLATIONS["de"] bzw. TRANSLATIONS["en"]. Die Oberflaeche referenziert nur noch
   t("irgendein.key", ...), nie mehr feste deutsche Strings direkt im
   Widget-Code (interne print()-Meldungen/Kommentare/Docstrings sind davon
   ausgenommen - die sieht nie ein Nutzer, nur du beim Debuggen).
-- Die Sprache wird EINMAL beim Programmstart ermittelt:
+- Die Sprache wird beim Programmstart ermittelt:
     1. Manuelle Auswahl aus config.json ("sprache": "de"/"en"), falls
        vorhanden - hat immer Vorrang vor der Systemsprache.
-    2. Sonst: Systemsprache des Mac über NSLocale.preferredLanguages()
-       (zuverlässiger als Pythons eingebautes locale-Modul, gerade in
-       einer gebauten .app).
+    2. Sonst: Systemsprache (plattform.systemsprache).
     3. Fallback: Deutsch.
-- Ein Sprachwechsel im Preferences-Fenster (siehe gui.py, Tab "Allgemein")
-  schreibt nur die Auswahl nach config.json und wird erst nach einem
-  Neustart der App wirksam - bewusst so gehalten, statt im laufenden
-  Betrieb jedes einzelne Widget live umzubeschriften, was bei der Menge an
-  Widgets sehr fehleranfällig wäre.
+- Ein Sprachwechsel im Einstellungsfenster wirkt sofort: setze_sprache()
+  stellt um, danach baut das Hauptfenster seine Oberflaeche neu auf.
 """
 
-import os
-import json
-
-try:
-    from AppKit import NSLocale
-    _NSLOCALE_VERFUEGBAR = True
-except ImportError:
-    _NSLOCALE_VERFUEGBAR = False
+from smartsearch import plattform
+from smartsearch.kern.einstellungen import lade_config, speichere_config
 
 UNTERSTUETZTE_SPRACHEN = ("de", "en")
-# Gleiche Ablage wie search.py - siehe pfade.py.
-from smartsearch.kern.pfade import CONFIG_FILE  # noqa: F401
 
 
 def _lade_gespeicherte_sprache():
     try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                config = json.load(f)
-            sprache = config.get("sprache")
-            if sprache in UNTERSTUETZTE_SPRACHEN:
-                return sprache
+        sprache = lade_config().get("sprache")
+        if sprache in UNTERSTUETZTE_SPRACHEN:
+            return sprache
     except Exception:
         pass
     return None
 
 
-def _erkenne_systemsprache():
-    if _NSLOCALE_VERFUEGBAR:
-        try:
-            for code in NSLocale.preferredLanguages():
-                kurz = str(code)[:2].lower()
-                if kurz in UNTERSTUETZTE_SPRACHEN:
-                    return kurz
-        except Exception:
-            pass
-    return "de"
-
-
 def _ermittle_startsprache():
-    return _lade_gespeicherte_sprache() or _erkenne_systemsprache()
+    # Die Systemsprache fragt plattform/ ab - auf dem Mac ueber NSLocale,
+    # unter Windows ueber die Anzeigesprache. Frueher stand hier nur der
+    # Mac-Weg, unter Windows startete die Oberflaeche immer auf Deutsch.
+    return (_lade_gespeicherte_sprache()
+            or plattform.systemsprache(UNTERSTUETZTE_SPRACHEN)
+            or "de")
 
 
-# Einmal beim Import ermittelt - siehe Modul-Docstring, warum ein
-# Sprachwechsel zur Laufzeit bewusst einen Neustart braucht.
+# Einmal beim Import ermittelt, danach nur noch ueber setze_sprache().
 SPRACHE = _ermittle_startsprache()
 
 
@@ -75,19 +51,17 @@ def aktuelle_sprache():
 
 
 def setze_sprache(code):
-    """Speichert die Sprachwahl dauerhaft in config.json. Wird erst nach
-    einem Neustart der App wirksam (SPRACHE oben wird nur beim Modul-Import
-    einmal ermittelt)."""
+    """Stellt die Sprache um - SOFORT fuer alle folgenden t()-Aufrufe und
+    dauerhaft in config.json. Die Oberflaeche baut danach ihre Fenster neu
+    auf (siehe Hauptfenster.wende_sprache_live_an)."""
+    global SPRACHE
     if code not in UNTERSTUETZTE_SPRACHEN:
         return
+    SPRACHE = code
     try:
-        config = {}
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                config = json.load(f)
+        config = lade_config()
         config["sprache"] = code
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(config, f, indent=2)
+        speichere_config(config)
     except Exception:
         pass
 
@@ -172,6 +146,7 @@ TRANSLATIONS = {
         "index.notification_body": "Die Indexierung ist abgeschlossen.",
         "index.progress_indexing": "Indexiere {n} von {gesamt}: {name} – noch etwa {zeit}",
         "index.progress_calculating": "{text} – noch etwa {zeit}",
+        "index.progress_vectors": "Berechne KI-Vektoren (Batch {batch}/{batches})...",
 
         # Nicht lesbare Dateien
         "errors.dialog_title": "Dateien ohne durchsuchbaren Text",
@@ -425,6 +400,7 @@ TRANSLATIONS = {
         "index.notification_body": "Indexing has finished.",
         "index.progress_indexing": "Indexing {n} of {gesamt}: {name} – about {zeit} left",
         "index.progress_calculating": "{text} – about {zeit} left",
+        "index.progress_vectors": "Computing AI vectors (batch {batch}/{batches})...",
 
         # Unreadable files
         "errors.dialog_title": "Files without searchable text",

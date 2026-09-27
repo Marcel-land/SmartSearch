@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """
-menueleiste_mac.py - der Mac-spezifische Teil der Bedienung.
+plattform/mac.py - alles, was SmartSearch auf dem Mac ANDERS macht als
+unter Windows.
 
-Hier steckt alles, was ueber PyObjC direkt mit macOS spricht:
-Menueleisten-Symbol (die Lupe oben rechts), globaler Tastenkurzbefehl,
-Dock-Symbol, Fenster nach vorne holen und die Pruefung, ob SmartSearch
-schon laeuft.
+Zwei Teile:
+  1. Bedienung ueber PyObjC: Menueleisten-Symbol (die Lupe oben rechts),
+     globaler Tastenkurzbefehl, Dock-Symbol, Fenster nach vorne holen und
+     die Pruefung, ob SmartSearch schon laeuft.
+  2. System-Handgriffe: Datei oeffnen, im Finder zeigen, Quick Look,
+     Benachrichtigung, Autostart (LaunchAgent), Systemsprache.
+
+Gegenstueck: plattform/windows.py - gleiche Funktionsnamen, gleiche
+Bedeutung. Welche der beiden Dateien geladen wird, entscheidet
+plattform/__init__.py.
 
 WARUM AUSGELAGERT
 -----------------
 Diese Dinge gibt es unter Windows entweder gar nicht oder voellig anders
 (Infobereich statt Menueleiste, RegisterHotKey statt NSEvent-Monitor).
-Solange sie mitten in gui.py standen, liess sich das Programm auf einem
+Solange sie mitten in oberflaeche/hauptfenster.py standen, liess sich das Programm auf einem
 anderen System nicht einmal starten - schon der Import von AppKit ganz
-oben haette es beendet. Jetzt importiert gui.py diese Datei nur auf dem
-Mac; das Gegenstueck fuer Windows kommt spaeter als eigene Datei daneben.
+oben haette es beendet. Jetzt wird diese Datei nur auf dem Mac geladen.
 
 Alles hier ist defensiv gebaut: faellt ein Teil aus (fehlende PyObjC-
 Version, fehlende Berechtigung), soll die App trotzdem laufen - nur eben
@@ -22,6 +28,8 @@ ohne diese Bequemlichkeit.
 """
 
 import os
+import subprocess
+import sys
 
 VERFUEGBAR = False
 HOTKEY_VERFUEGBAR = False
@@ -73,7 +81,7 @@ if VERFUEGBAR:
 
     class MenueleistenSymbol(NSObject):
         """Die Lupe in der Menueleiste. Ein Klick darauf ruft die
-        uebergebene Funktion auf (in gui.py: Fenster auf/zu)."""
+        uebergebene Funktion auf (in oberflaeche/hauptfenster.py: Fenster auf/zu)."""
 
         def initWithCallback_(self, callback):
             self = objc.super(MenueleistenSymbol, self).init()
@@ -115,8 +123,8 @@ def menueleisten_symbol_anlegen(callback, beenden_callback=None, icon_pfad=None)
     beenden_callback und icon_pfad werden hier nicht gebraucht (Beenden
     laeuft auf dem Mac ueber Cmd+Q und den Knopf in der App, das Symbol
     ist ein System-Zeichen). Sie stehen nur in der Signatur, damit
-    gui.py fuer Mac und Windows denselben Aufruf benutzen kann - siehe
-    menueleiste_windows.py."""
+    die Oberflaeche fuer Mac und Windows denselben Aufruf benutzen kann -
+    siehe plattform/windows.py."""
     if not VERFUEGBAR:
         return None
     try:
@@ -138,7 +146,7 @@ def registriere_globalen_hotkey(callback):
     Symbol funktioniert davon unabhaengig immer.
 
     Der Handler laeuft auf Apples Event-Loop, NICHT im Tk-Hauptthread.
-    Der Callback darf deshalb keine Widgets anfassen (in gui.py setzt er
+    Der Callback darf deshalb keine Widgets anfassen (in oberflaeche/hauptfenster.py setzt er
     nur ein Flag, das alle 50 ms abgefragt wird).
     """
     if not HOTKEY_VERFUEGBAR:
@@ -230,7 +238,7 @@ def programmnamen_setzen(name="SmartSearch"):
     """Sorgt dafuer, dass die App beim Start aus dem Quelltext nicht
     "Python" heisst.
 
-    HINTERGRUND: Wird gui.py direkt mit dem Python aus dem venv
+    HINTERGRUND: Wird SmartSearch direkt mit dem Python aus dem venv
     gestartet, gibt es kein eigenes App-Paket - macOS nimmt Namen und
     Menuetitel deshalb aus dem Paket des Python-Frameworks. Das Dock-
     Symbol laesst sich zur Laufzeit ersetzen (siehe dock_symbol_setzen),
@@ -264,7 +272,7 @@ def programmnamen_setzen(name="SmartSearch"):
 def app_ist_aktiv():
     """True, wenn SmartSearch gerade die vorderste Anwendung ist.
 
-    gui.py fragt das alle 50 ms ab, um einen Klick auf das App-Symbol
+    Die Oberflaeche fragt das alle 50 ms ab, um einen Klick auf das App-Symbol
     (Dock, Launchpad, Cmd+Tab) zu erkennen: macOS aktiviert die App dabei
     immer, schickt Tk die dafuer eigentlich vorgesehene Meldung
     ReopenApplication im gebauten Bundle aber nicht zuverlaessig.
@@ -304,3 +312,140 @@ def laufende_instanz_aktivieren():
     except Exception as e:
         print(f"[Start] Instanzpruefung ueber macOS nicht moeglich: {e}")
     return False
+
+
+# ===========================================================================
+# SYSTEM-HANDGRIFFE (bis Herbst 2026 in plattform.py, dort je Funktion mit
+# "wenn Mac ... sonst Windows ..." - jetzt je System eine eigene Datei)
+# ===========================================================================
+
+# Quick Look gibt es so nur auf dem Mac.
+VORSCHAU_VERFUEGBAR = True
+
+
+def _still_ausfuehren(befehl):
+    """Startet ein Programm im Hintergrund und schluckt dessen Ausgabe."""
+    subprocess.Popen(befehl, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def benachrichtigung(titel, text):
+    """Kurze Systemmeldung ("Indexierung fertig")."""
+    try:
+        def escape(s):
+            return s.replace("\\", "\\\\").replace('"', '\\"')
+        script = f'display notification "{escape(text)}" with title "{escape(titel)}"'
+        subprocess.run(["osascript", "-e", script], check=False)
+    except Exception as e:
+        print(f"[Benachrichtigung fehlgeschlagen] {e}")
+
+
+def datei_oeffnen(pfad):
+    """Oeffnet eine Datei mit dem Standardprogramm."""
+    try:
+        subprocess.run(["open", pfad], check=True)
+        return True
+    except Exception as e:
+        print(f"[Oeffnen fehlgeschlagen] {e}")
+        return False
+
+
+def im_dateimanager_zeigen(dateipfad):
+    """Oeffnet den Finder und markiert die Datei darin."""
+    if not dateipfad or not os.path.exists(dateipfad):
+        return
+    try:
+        _still_ausfuehren(["open", "-R", dateipfad])
+    except Exception as e:
+        print(f"[Dateimanager Fehler] {e}")
+
+
+def vorschau(dateipfad):
+    """Schnellvorschau ohne die Datei wirklich zu oeffnen (Quick Look)."""
+    if not dateipfad or not os.path.exists(dateipfad):
+        return
+    try:
+        _still_ausfuehren(["qlmanage", "-p", dateipfad])
+    except Exception as e:
+        print(f"[Vorschau Fehler] {e}")
+
+
+def app_pfad():
+    """Pfad, mit dem sich SmartSearch selbst erneut starten laesst.
+
+    Das .app-Bundle (NICHT die Programmdatei tief darin - "open" braucht
+    das Bundle). Beim Start aus dem Quelltext der Pfad des Skripts.
+    """
+    pfad = os.path.abspath(sys.executable if getattr(sys, "frozen", False) else sys.argv[0])
+    marke = ".app" + os.sep + "Contents" + os.sep
+    if marke in pfad:
+        return pfad.split(marke)[0] + ".app"
+    return pfad
+
+
+_MAC_PLIST = os.path.expanduser("~/Library/LaunchAgents/com.smartsearch.app.plist")
+
+
+def autostart_aktiv():
+    """Startet SmartSearch aktuell automatisch mit der Anmeldung?"""
+    try:
+        return os.path.exists(_MAC_PLIST)
+    except Exception:
+        return False
+
+
+def autostart_setzen(einschalten):
+    """Autostart ueber einen LaunchAgent ein- oder ausschalten.
+
+    Rueckgabe: (True, "") bei Erfolg, sonst (False, Fehlertext).
+    """
+    try:
+        if einschalten:
+            inhalt = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.smartsearch.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/open</string>
+        <string>{app_pfad()}</string>
+        <string>--args</string>
+        <string>--autostart</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>"""
+            os.makedirs(os.path.dirname(_MAC_PLIST), exist_ok=True)
+            with open(_MAC_PLIST, "w") as f:
+                f.write(inhalt)
+        elif os.path.exists(_MAC_PLIST):
+            os.remove(_MAC_PLIST)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def systemsprache(unterstuetzt):
+    """Erste bevorzugte Sprache des Mac, die SmartSearch kann - oder None.
+
+    Ueber NSLocale statt Pythons locale-Modul: das liefert in einer
+    gebauten .app oft nur "C" zurueck. (Stand frueher in i18n.py - dort
+    lief es als Mac-Code auch unter Windows mit und fiel dort still aus.)
+    """
+    try:
+        from AppKit import NSLocale
+        for code in NSLocale.preferredLanguages():
+            kurz = str(code)[:2].lower()
+            if kurz in unterstuetzt:
+                return kurz
+    except Exception:
+        pass
+    return None
+
+
+def system_beschreibung():
+    """Fuer die Rueckmelde-E-Mail, z. B. "macOS 15.1 (arm64)"."""
+    import platform
+    return f"macOS {platform.mac_ver()[0]} ({platform.machine()})"

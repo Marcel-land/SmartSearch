@@ -11,6 +11,10 @@ import os
 import numpy as np
 
 from smartsearch.kern import suche as s
+from smartsearch.kern.index import index_mit_matrix
+from smartsearch.kern.modell import geladenes_modell
+from smartsearch.kern.pfade import INDEX_FILE
+from smartsearch.kern.sprache import anfrage_woerter, wort_trifft
 
 ANFRAGEN = [
     "Vertrag",
@@ -79,11 +83,11 @@ def hauptteil():
     print("=" * 78)
     print("SUCHDIAGNOSE")
     print("=" * 78)
-    print(f"Indexdatei: {s.INDEX_FILE}")
-    print(f"vorhanden : {os.path.exists(s.INDEX_FILE)}")
-    if os.path.exists(s.INDEX_FILE):
+    print(f"Indexdatei: {INDEX_FILE}")
+    print(f"vorhanden : {os.path.exists(INDEX_FILE)}")
+    if os.path.exists(INDEX_FILE):
         import datetime
-        stand = datetime.datetime.fromtimestamp(os.path.getmtime(s.INDEX_FILE))
+        stand = datetime.datetime.fromtimestamp(os.path.getmtime(INDEX_FILE))
         print(f"Stand     : {stand:%d.%m.%Y %H:%M}")
     print()
     print("Geltende Werte:")
@@ -95,7 +99,7 @@ def hauptteil():
     print(f"  RELATIVER_ABSTAND             = {s.RELATIVER_ABSTAND}")
     print()
 
-    eintraege, matrix = s._index_mit_matrix()
+    eintraege, matrix = index_mit_matrix()
     if not eintraege:
         print("Index ist leer oder unlesbar - bitte erst 'Index aktualisieren'.")
         return
@@ -107,13 +111,13 @@ def hauptteil():
     print()
 
     print("Modell wird geladen ...", flush=True)
-    modell = s.geladenes_modell()
+    modell = geladenes_modell()
     print("geladen.\n")
 
     bewertung = []   # (anfrage, bestanden, bemerkung)
 
     for anfrage in ANFRAGEN:
-        woerter = s.anfrage_woerter(anfrage)
+        woerter = anfrage_woerter(anfrage)
         vektor = np.asarray(
             modell.encode([anfrage], normalize_embeddings=True)[0], dtype="float32")
         werte = matrix @ vektor if matrix is not None else None
@@ -139,9 +143,9 @@ def hauptteil():
             # nach so einer Tabelle einstellt, stellt sie nach falschen
             # Zahlen ein.
             for w in woerter:
-                if s.wort_trifft(w, dateiname):
+                if wort_trifft(w, dateiname):
                     gefunden += 1; im_namen += 1
-                elif s.wort_trifft(w, gesamttext):
+                elif wort_trifft(w, gesamttext):
                     gefunden += 1
 
             sem_norm = (bester - s.SEMANTIK_UNTERGRENZE) / (

@@ -121,7 +121,7 @@ def stelle_datenordner_sicher():
     """Legt den Datenordner an und holt einmalig alte Daten herueber.
 
     Wird beim Import dieses Moduls aufgerufen, also automatisch beim
-    Programmstart - egal ob ueber gui.py oder search.py. Schlaegt bewusst
+    Programmstart - egal ueber welchen Einstieg. Schlaegt bewusst
     nie hart fehl: kann der Ordner nicht angelegt werden, laeuft die App
     trotzdem weiter und meldet das Problem erst dort, wo wirklich
     geschrieben wird.

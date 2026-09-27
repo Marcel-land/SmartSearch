@@ -21,6 +21,6 @@ from smartsearch import version
 version.APP_VERSION = "1.0.0"
 print("[Test] Laeuft als Fassung 1.0.0 - die Update-Pruefung muss anschlagen.\n")
 
-from smartsearch.oberflaeche import hauptfenster  # noqa: E402  (erst NACH dem Ueberschreiben)
+from smartsearch.start import starten  # noqa: E402  (erst NACH dem Ueberschreiben)
 
-hauptfenster.starten()
+starten()

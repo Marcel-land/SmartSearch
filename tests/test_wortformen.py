@@ -11,7 +11,7 @@ Aufruf (im Projektordner):   venv/bin/python -m tests.test_wortformen
 
 import sys
 
-from smartsearch.kern.suche import wort_trifft, wortformen
+from smartsearch.kern.sprache import wort_trifft, wortformen
 
 
 # (Suchwort, Text, erwartet, wofuer der Fall steht)

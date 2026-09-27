@@ -8,10 +8,10 @@ ja, mit welchem Text?
 
 Aufrufe:
 
-    python3.14 diagnose.py                      Ueberblick + nicht lesbare Dateien
-    python3.14 diagnose.py drucker              Sucht "drucker" in Namen und Text
-    python3.14 diagnose.py --datei /pfad.pdf    Prueft eine bestimmte Datei
-    python3.14 diagnose.py --scores "drucker rechnung"
+    venv/bin/python -m werkzeuge.diagnose                      Ueberblick + nicht lesbare Dateien
+    venv/bin/python -m werkzeuge.diagnose drucker              Sucht "drucker" in Namen und Text
+    venv/bin/python -m werkzeuge.diagnose --datei /pfad.pdf    Prueft eine bestimmte Datei
+    venv/bin/python -m werkzeuge.diagnose --scores "drucker rechnung"
                                                 Zeigt, wie die Suche bewertet
 """
 
@@ -19,7 +19,7 @@ import os
 import pickle
 import sys
 
-from pfade import INDEX_FILE
+from smartsearch.kern.pfade import INDEX_FILE
 
 
 def lade():
@@ -120,7 +120,7 @@ def zeige_scores(anfrage, anzahl=15):
     """Fuehrt eine echte Suche aus und zeigt die Bewertung der besten
     Treffer - so laesst sich unterscheiden, ob eine Datei fehlt oder nur
     schlecht bewertet wird."""
-    import search as smart_search
+    from smartsearch.kern import suche as smart_search
 
     print(f'Bewertung fuer "{anfrage}"\n')
     ergebnisse = smart_search.suche_intern(anfrage, top_n=anzahl)

@@ -1,13 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
 # Baubefehl (auf einem WINDOWS-Rechner, nicht auf dem Mac):
-#     py -m PyInstaller SmartSearch-windows.spec --noconfirm
+#     venv\Scripts\python -m PyInstaller bauen\windows\SmartSearch.spec --noconfirm
+# (im Projektordner ausfuehren - dort entstehen build\ und dist\)
 #
 # NOCH NICHT AUF WINDOWS ERPROBT. Diese Datei ist der Startpunkt fuer den
 # ersten Bau, kein fertiges Ergebnis - die Liste unter hiddenimports wird
 # sich beim ersten Lauf erfahrungsgemaess noch aendern.
 #
-# Warum eine eigene Datei und keine Verzweigung in SmartSearch.spec:
+# Warum eine eigene Datei und keine Verzweigung in bauen/mac/SmartSearch.spec:
 # der Mac-Bau ist der, der heute funktioniert und signiert wird. Eine
 # Verzweigung mittendrin wuerde ihn bei jedem Windows-Versuch mitgefaehrden.
 #
@@ -22,11 +23,17 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 import pathlib
 import re
 
-# Versionsnummer aus gui.py lesen - genau wie in der Mac-Fassung. Sie darf
-# an keiner zweiten Stelle gepflegt werden.
+# Diese Datei liegt in bauen/<system>/ - der Projektordner ist zwei Ebenen
+# darueber. SPECPATH setzt PyInstaller selbst auf den Ordner dieser Datei.
+ROOT = pathlib.Path(SPECPATH).resolve().parents[1]  # noqa: F821
+
+# Die Versionsnummer steht an genau EINER Stelle: smartsearch/version.py.
+# Sie hier ein zweites Mal zu pflegen ging schief - bis Fassung 1.0.2 stand
+# im Info.plist durchgehend "1.0.1". Der Finder und spaeter auch die
+# Beglaubigung durch Apple lesen aber genau diesen Wert.
 APP_VERSION = re.search(
     r'APP_VERSION\s*=\s*"([^"]+)"',
-    pathlib.Path("gui.py").read_text(encoding="utf-8"),
+    (ROOT / "smartsearch" / "version.py").read_text(encoding="utf-8"),
 ).group(1)
 
 torch_module = []
@@ -38,10 +45,11 @@ except Exception:
     pass
 
 a = Analysis(
-    ['gui.py'],
-    pathex=[],
+    [str(ROOT / 'smartsearch' / '__main__.py')],
+    pathex=[str(ROOT)],
     binaries=[],
-    datas=[('LICENSE.txt', '.')] + torch_daten,
+    datas=[(str(ROOT / 'LICENSE.txt'), '.'),
+           (str(ROOT / 'ressourcen'), 'ressourcen')] + torch_daten,
     hiddenimports=[
         'sentence_transformers',
         'customtkinter',
@@ -71,7 +79,7 @@ a = Analysis(
         'tkinter.test',
         # Die Mac-Teile duerfen hier nicht mit hinein - sie existieren
         # unter Windows nicht und wuerden den Bau abbrechen.
-        'Vision', 'Foundation', 'objc', 'AppKit', 'menueleiste_mac',
+        'Vision', 'Foundation', 'objc', 'AppKit', 'smartsearch.plattform.mac',
     ],
     noarchive=False,
     optimize=0,
@@ -95,7 +103,7 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    icon=['icon.ico'],
+    icon=[str(ROOT / 'ressourcen' / 'icons' / 'icon.ico')],
     # Zeigt Windows in den Dateieigenschaften an und wird von
     # Softwareverteilung ausgelesen.
     version_file=None,

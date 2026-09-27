@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# Baubefehl:  pyinstaller SmartSearch.spec --noconfirm
+# Baubefehl (im Projektordner):  pyinstaller bauen/mac/SmartSearch.spec --noconfirm
+# Normalerweise nicht direkt, sondern ueber bauen/mac/build.sh.
 #
 # hiddenimports: PyInstaller findet diese Pakete nicht von allein, weil sie
 # erst zur Laufzeit dynamisch importiert werden. Ohne sie startet die
@@ -11,14 +12,17 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 import pathlib
 import re
 
-# Die Versionsnummer steht an genau EINER Stelle: APP_VERSION in gui.py.
+# Diese Datei liegt in bauen/<system>/ - der Projektordner ist zwei Ebenen
+# darueber. SPECPATH setzt PyInstaller selbst auf den Ordner dieser Datei.
+ROOT = pathlib.Path(SPECPATH).resolve().parents[1]  # noqa: F821
+
+# Die Versionsnummer steht an genau EINER Stelle: smartsearch/version.py.
 # Sie hier ein zweites Mal zu pflegen ging schief - bis Fassung 1.0.2 stand
-# im Info.plist durchgehend "1.0.1", weil beim Hochzaehlen nur gui.py
-# angefasst wurde. Der Finder und spaeter auch die Beglaubigung durch Apple
-# lesen aber genau diesen Wert.
+# im Info.plist durchgehend "1.0.1". Der Finder und spaeter auch die
+# Beglaubigung durch Apple lesen aber genau diesen Wert.
 APP_VERSION = re.search(
     r'APP_VERSION\s*=\s*"([^"]+)"',
-    pathlib.Path("gui.py").read_text(encoding="utf-8"),
+    (ROOT / "smartsearch" / "version.py").read_text(encoding="utf-8"),
 ).group(1)
 
 # torchgen gehoert zu PyTorch und wird beim Laden eines Modells nachgeladen.
@@ -38,12 +42,15 @@ except Exception:
     pass
 
 a = Analysis(
-    ['gui.py'],
-    pathex=[],
+    [str(ROOT / 'smartsearch' / '__main__.py')],
+    pathex=[str(ROOT)],
     binaries=[],
     # LICENSE.txt liegt im fertigen Bundle bei - eine App ohne
     # beiliegende Nutzungsbedingungen sollte man nicht verteilen.
-    datas=[('LICENSE.txt', '.')] + torch_daten,
+    # ressourcen/ (Symbole) liest das Programm zur Laufzeit ueber
+    # pfade.ressource() - siehe dort.
+    datas=[(str(ROOT / 'LICENSE.txt'), '.'),
+           (str(ROOT / 'ressourcen'), 'ressourcen')] + torch_daten,
     hiddenimports=[
         'sentence_transformers',
         'customtkinter',
@@ -102,7 +109,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['icon.icns'],
+    icon=[str(ROOT / 'ressourcen' / 'icons' / 'icon.icns')],
 )
 coll = COLLECT(
     exe,
@@ -116,7 +123,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='SmartSearch.app',
-    icon='icon.icns',
+    icon=str(ROOT / 'ressourcen' / 'icons' / 'icon.icns'),
     # Eindeutige Bundle-ID: macOS braucht sie fuer Autostart (LaunchAgent),
     # Berechtigungen und spaeteres Signieren. Ohne sie behandelt das System
     # die App bei jedem Update wie eine voellig neue Anwendung.
@@ -133,7 +140,7 @@ app = BUNDLE(
         # Eintrag kann waehrend der Indexierung ein zweites Dock-Symbol
         # auftauchen (ein Arbeits-Kindprozess startet dann das komplette
         # Bundle noch einmal). Zusammen mit multiprocessing.freeze_support()
-        # ganz oben in gui.py ist das doppelt abgesichert.
+        # ganz oben in smartsearch/__main__.py ist das doppelt abgesichert.
         'LSMultipleInstancesProhibited': True,
         # Klartext-Begruendungen, die macOS im Berechtigungsdialog zeigt.
         # Fehlen sie, bricht der Zugriff auf Dokumente/Downloads/Schreibtisch

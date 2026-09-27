@@ -6,12 +6,12 @@ Anfrage ueberhaupt Treffer bekommt, und laeuft komplett auf Zeichenketten.
 Sie laesst sich deshalb in einer Sekunde pruefen, waehrend die vollstaendige
 Suchdiagnose (such_diagnose.py) erst das Modell laden muss.
 
-Aufruf:   venv/bin/python test_wortformen.py
+Aufruf (im Projektordner):   venv/bin/python -m tests.test_wortformen
 """
 
 import sys
 
-from search import wort_trifft, wortformen
+from smartsearch.kern.suche import wort_trifft, wortformen
 
 
 # (Suchwort, Text, erwartet, wofuer der Fall steht)

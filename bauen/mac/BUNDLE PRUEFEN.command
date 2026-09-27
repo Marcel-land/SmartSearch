@@ -11,7 +11,8 @@
 # alle noetigen Bausteine im Bundle stecken, und oeffnet die App danach
 # sichtbar zum Nachtesten.
 
-cd "$(dirname "$0")" || exit 1
+# Liegt zwei Ebenen unter dem Projektordner - dort wird gearbeitet.
+cd "$(dirname "$0")/../.." || exit 1
 
 LOG="pruef_log.txt"
 BINARY="dist/SmartSearch.app/Contents/MacOS/SmartSearch"

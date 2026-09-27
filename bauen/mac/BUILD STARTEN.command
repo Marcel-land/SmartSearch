@@ -6,7 +6,8 @@
 # schreibt einen vollstaendigen Bericht in build_log.txt, damit Fehler
 # nachvollzogen werden koennen, ohne etwas abtippen zu muessen.
 
-cd "$(dirname "$0")" || exit 1
+# Liegt in bauen/mac/ - gearbeitet wird im Projektordner zwei Ebenen darueber.
+cd "$(dirname "$0")/../.." || exit 1
 
 LOG="build_log.txt"
 
@@ -81,7 +82,7 @@ echo
 
 # build.sh fragt nach, wenn Vision fehlt - hier soll nichts nachfragen,
 # deshalb wird die Antwort gleich mitgegeben.
-echo "j" | bash build.sh
+echo "j" | bash bauen/mac/build.sh
 ERGEBNIS=$?
 
 echo

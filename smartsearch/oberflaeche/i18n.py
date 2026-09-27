@@ -33,7 +33,7 @@ except ImportError:
 
 UNTERSTUETZTE_SPRACHEN = ("de", "en")
 # Gleiche Ablage wie search.py - siehe pfade.py.
-from pfade import CONFIG_FILE  # noqa: F401
+from smartsearch.kern.pfade import CONFIG_FILE  # noqa: F401
 
 
 def _lade_gespeicherte_sprache():

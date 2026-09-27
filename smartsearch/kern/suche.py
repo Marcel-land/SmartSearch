@@ -33,11 +33,11 @@ from concurrent.futures import ThreadPoolExecutor
 # Nutzerdaten liegen NICHT mehr neben dem Programmcode, sondern in
 # ~/Library/Application Support/SmartSearch - siehe pfade.py fuer die
 # ausfuehrliche Begruendung (Updates, Signierung, Schreibrechte).
-from pfade import INDEX_FILE, CONFIG_FILE, FAVORITEN_FILE  # noqa: F401
+from smartsearch.kern.pfade import INDEX_FILE, CONFIG_FILE, FAVORITEN_FILE  # noqa: F401
 
 # Texterkennung fuer gescannte PDFs - laeuft ueber Apples Vision-Framework
 # statt ueber extern zu installierendes Tesseract/poppler, siehe ocr.py.
-import ocr
+from smartsearch.kern import ocr
 
 UNTERSTUETZT = (".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx")
 

@@ -34,11 +34,41 @@ Zieldatei und die Migration ueberspringt sie.
 
 import os
 import shutil
+import sys
 
 APP_NAME = "SmartSearch"
 
-# Alter Ablageort: der Ordner, in dem der Programmcode liegt.
-_ALTER_ORDNER = os.path.dirname(os.path.abspath(__file__))
+# Projektordner (dort liegen ressourcen/, tests/, werkzeuge/ ...). Diese
+# Datei liegt in smartsearch/kern/, also zwei Ebenen darunter.
+PROJEKT_ORDNER = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Alter Ablageort der Nutzerdaten: bis zur Einfuehrung dieser Datei lagen
+# index.pkl & Co. direkt im Projektordner neben gui.py.
+_ALTER_ORDNER = PROJEKT_ORDNER
+
+
+# ---------------------------------------------------------------------------
+# PROGRAMM-RESSOURCEN (Symbole usw.)
+#
+# Nicht zu verwechseln mit den Nutzerdaten weiter unten: Ressourcen gehoeren
+# zum Programm und werden mit ausgeliefert, Nutzerdaten entstehen beim
+# Benutzen.
+#
+# Warum eine eigene Funktion: Beim Start aus dem Quelltext liegen die
+# Symbole in ressourcen/ im Projektordner. In der gebauten App packt
+# PyInstaller sie in einen eigenen Ordner, den es zur Laufzeit in
+# sys._MEIPASS nennt. Vorher stand an drei Stellen im Code
+# "os.path.dirname(__file__) + icon.png" - in der gebauten App zeigte das
+# ins Leere, weil icon.png dort gar nicht mitgepackt war. Unter Windows
+# haette das Fenster deshalb nie ein eigenes Symbol bekommen.
+# ---------------------------------------------------------------------------
+
+def ressource(relativer_pfad):
+    """Absoluter Pfad einer mitgelieferten Datei, z. B. ressource("icons/icon.png")."""
+    basis = getattr(sys, "_MEIPASS", None)
+    if basis:
+        return os.path.join(basis, "ressourcen", relativer_pfad)
+    return os.path.join(PROJEKT_ORDNER, "ressourcen", relativer_pfad)
 
 
 def _ermittle_daten_ordner():

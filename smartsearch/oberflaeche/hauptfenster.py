@@ -72,12 +72,12 @@ except ImportError:
 # NUR auf dem Mac importiert. Frueher stand das alles hier oben als
 # harter "from AppKit import ..." - damit liess sich diese Datei auf
 # Windows nicht einmal starten.
-import plattform
+from smartsearch import plattform
 
 if plattform.IST_MAC:
-    import menueleiste_mac as system_ui
+    from smartsearch.plattform import mac as system_ui
 elif plattform.IST_WINDOWS:
-    import menueleiste_windows as system_ui
+    from smartsearch.plattform import windows as system_ui
 else:
     system_ui = None
 
@@ -90,11 +90,10 @@ if system_ui is not None and not getattr(system_ui, "VERFUEGBAR", False):
     print("[Start] Kein Symbol in Menueleiste/Infobereich - Fenster bleibt sichtbar.")
     system_ui = None
 
-import search as smart_search
-import ocr
-import i18n
-from i18n import t
-import farben
+from smartsearch.kern import suche as smart_search
+from smartsearch.kern import ocr
+from smartsearch.oberflaeche import i18n, farben
+from smartsearch.oberflaeche.i18n import t
 
 ctk.set_appearance_mode("System")
 # "blue" laedt das vollstaendige Standardthema - farben.thema_anwenden
@@ -106,7 +105,7 @@ farben.thema_anwenden(ctk)
 
 # Siehe pfade.py: liegt in ~/Library/Application Support/SmartSearch,
 # damit ein App-Update den Suchverlauf nicht mitloescht.
-from pfade import VERLAUF_FILE as VERLAUF_DATEI, DATEN_ORDNER  # noqa: F401
+from smartsearch.kern.pfade import VERLAUF_FILE as VERLAUF_DATEI, DATEN_ORDNER, ressource  # noqa: F401
 MAX_VERLAUF = 20
 PLATZHALTER_TEXT = t("search.placeholder")
 UNTERSTUETZTE_ENDUNGEN = {".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md"}
@@ -124,8 +123,8 @@ FENSTER_BREITE_OFFEN = FENSTER_BREITE_ZU + 220 + 8
 FENSTER_HOEHE = 440
 
 # ---------- VERSION & AUTO-UPDATE ----------
-# Bei jedem Release von Hand hochzählen (siehe pruefe_auf_updates()).
-APP_VERSION = "1.0.6"
+# Die Versionsnummer steht in smartsearch/version.py.
+from smartsearch.version import APP_VERSION
 
 # Anschrift fuer Rueckmeldungen. Vor der Veroeffentlichung durch die
 # eigene Adresse ersetzen - am besten eine, die zur Domain gehoert.
@@ -2968,7 +2967,6 @@ def _start_protokollieren():
     klein - es werden nur die letzten 50 Zeilen aufgehoben.
     """
     try:
-        from pfade import DATEN_ORDNER
         os.makedirs(DATEN_ORDNER, exist_ok=True)
         pfad = os.path.join(DATEN_ORDNER, "start_log.txt")
         zeile = "%s  PID %s  Elternprozess %s  argv=%s\n" % (
@@ -2984,7 +2982,7 @@ def _start_protokollieren():
         print(f"[Start] Startprotokoll nicht moeglich: {e}")
 
 
-if __name__ == "__main__":
+def starten():
     _start_protokollieren()
 
     if "--selbsttest" in sys.argv:
@@ -3000,8 +2998,6 @@ if __name__ == "__main__":
 
     app_window = SmartSearchNotchWindow()
 
-    programm_ordner = os.path.dirname(os.path.abspath(__file__))
-
     if system_ui:
         # Symbol in der Menueleiste (Mac) bzw. im Infobereich (Windows).
         # Das Ergebnis MUSS in einer Variablen bleiben, sonst raeumt Python
@@ -3009,17 +3005,17 @@ if __name__ == "__main__":
         status_handler = system_ui.menueleisten_symbol_anlegen(
             lambda: setattr(app_window, "toggle_requested", True),
             beenden_callback=lambda: setattr(app_window, "beenden_requested", True),
-            icon_pfad=os.path.join(programm_ordner, "icon.png"),
+            icon_pfad=ressource("icons/icon.png"),
         )
         system_ui.als_programm_im_dock_anmelden()
-        system_ui.dock_symbol_setzen(os.path.join(programm_ordner, "icon.png"))
+        system_ui.dock_symbol_setzen(ressource("icons/icon.png"))
 
     if plattform.IST_WINDOWS:
         # Fenster- und Taskleistensymbol setzt unter Windows Tkinter selbst,
         # dafuer braucht es die .ico-Datei (.png versteht Windows an dieser
         # Stelle nicht).
         try:
-            app_window.iconbitmap(os.path.join(programm_ordner, "icon.ico"))
+            app_window.iconbitmap(ressource("icons/icon.ico"))
         except Exception as e:
             print(f"[Icon] Fenstersymbol konnte nicht gesetzt werden: {e}")
 

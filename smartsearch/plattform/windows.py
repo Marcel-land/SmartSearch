@@ -58,7 +58,8 @@ def menueleisten_symbol_anlegen(callback, beenden_callback=None, icon_pfad=None)
 
     try:
         if not icon_pfad or not os.path.exists(icon_pfad):
-            icon_pfad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
+            from smartsearch.kern.pfade import ressource
+            icon_pfad = ressource("icons/icon.png")
         bild = Image.open(icon_pfad)
 
         eintraege = [pystray.MenuItem("SmartSearch öffnen", lambda *_: callback(), default=True)]

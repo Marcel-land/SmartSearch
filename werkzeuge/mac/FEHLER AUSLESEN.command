@@ -8,7 +8,8 @@
 #
 # Per Doppelklick oeffnen. Das Ergebnis steht in fehlerspeicher.txt.
 
-cd "$(dirname "$0")" || exit 1
+# Liegt zwei Ebenen unter dem Projektordner - dort wird gearbeitet.
+cd "$(dirname "$0")/../.." || exit 1
 exec > >(tee fehlerspeicher.txt) 2>&1
 
 echo "=========================================="
@@ -21,7 +22,7 @@ echo
 
 python3 - <<'PYEOF'
 import os, pickle, collections
-from pfade import INDEX_FILE, DATEN_ORDNER
+from smartsearch.kern.pfade import INDEX_FILE, DATEN_ORDNER
 
 print(f"Datenordner: {DATEN_ORDNER}")
 if not os.path.exists(INDEX_FILE):

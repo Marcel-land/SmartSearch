@@ -5,12 +5,12 @@ die Suche verwirft - zusammen mit allen Zwischenwerten und der Regel,
 an der es gescheitert ist. Nur so laesst sich sehen, wo die Schwellen
 sitzen muessen.
 
-Aufruf:  venv/bin/python such_diagnose.py
+Aufruf (im Projektordner):  venv/bin/python -m werkzeuge.such_diagnose
 """
 import os
 import numpy as np
 
-import search as s
+from smartsearch.kern import suche as s
 
 ANFRAGEN = [
     "Vertrag",

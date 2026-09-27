@@ -2,8 +2,8 @@
 #
 # build.sh - Baut SmartSearch.app und daraus ein fertiges DMG zum Verteilen.
 #
-# Aufruf im Projektordner:
-#     ./build.sh
+# Aufruf (von ueberall):
+#     bauen/mac/build.sh
 #
 # Das Skript macht der Reihe nach:
 #   1. Voraussetzungen pruefen (venv, Pakete)
@@ -17,11 +17,14 @@
 
 set -e
 
-PROJEKT="$(cd "$(dirname "$0")" && pwd)"
+# Das Skript liegt in bauen/mac/ - gearbeitet wird im Projektordner zwei
+# Ebenen darueber, dort entstehen auch dist/, build/ und das DMG.
+PROJEKT="$(cd "$(dirname "$0")/../.." && pwd)"
+HIER="$PROJEKT/bauen/mac"
 cd "$PROJEKT"
 
 NAME="SmartSearch"
-VERSION="$(grep -m1 'APP_VERSION' gui.py | sed 's/[^0-9.]//g')"
+VERSION="$(grep -m1 'APP_VERSION' smartsearch/version.py | sed 's/[^0-9.]//g')"
 
 # Bewusst OHNE Versionsnummer im Dateinamen.
 #
@@ -93,7 +96,7 @@ echo
 # 3. Bauen
 # ---------------------------------------------------------------------------
 blau "PyInstaller laeuft (dauert einige Minuten)"
-pyinstaller "${NAME}.spec" --noconfirm --log-level WARN
+pyinstaller "$HIER/${NAME}.spec" --noconfirm --log-level WARN
 echo
 
 if [ ! -d "dist/${NAME}.app" ]; then
@@ -129,7 +132,7 @@ blau "DMG wird erstellt"
 STAGING="$(mktemp -d)"
 cp -R "dist/${NAME}.app" "$STAGING/"
 ln -s /Applications "$STAGING/Programme"
-[ -f "INSTALLATION.md" ] && cp "INSTALLATION.md" "$STAGING/Bitte zuerst lesen.txt"
+[ -f "$HIER/INSTALLATION.md" ] && cp "$HIER/INSTALLATION.md" "$STAGING/Bitte zuerst lesen.txt"
 [ -f "LICENSE.txt" ] && cp "LICENSE.txt" "$STAGING/"
 
 hdiutil create -volname "$NAME" -srcfolder "$STAGING" -ov -format UDZO \

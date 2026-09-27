@@ -9,7 +9,8 @@
 #
 # Per Doppelklick oeffnen. Der Bericht landet in test_log.txt.
 
-cd "$(dirname "$0")" || exit 1
+# Liegt zwei Ebenen unter dem Projektordner - dort wird gearbeitet.
+cd "$(dirname "$0")/../.." || exit 1
 
 LOG="test_log.txt"
 APP="dist/SmartSearch.app/Contents/MacOS/SmartSearch"

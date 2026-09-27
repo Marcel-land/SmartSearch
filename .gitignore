@@ -33,3 +33,26 @@ _to_delete/
 
 # Von wrangler (Cloudflare-Upload) angelegt
 .wrangler/
+
+# --- Nicht Teil des Programms: bleibt lokal, gehoert nicht ins Repository ---
+# Website (wird per wrangler direkt aus dem Ordner hochgeladen)
+website/
+# TikTok- und Video-Material
+*.mp4
+*.mov
+*.aiff
+*.docx
+STIMME ERZEUGEN.command
+smartsearch-fenster.png
+icon_rundlos.png
+# Planung, Notizen, alte Staende
+release-fahrplan.html
+PRODUCT.md
+ANLEITUNG.md
+angaben_eintragen.py
+_vorher/
+_update.tar.gz
+SmartSearch Pro.spec
+# Lokale Hilfsskripte und Ausgaben
+commit_*.command
+such-diagnose.txt

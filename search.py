@@ -315,6 +315,43 @@ def modell_ist_vorhanden():
     return _ordnergroesse(ordner) > MODELL_GROESSE_BYTES * 0.9
 
 
+# ---------------------------------------------------------------------------
+# OFFLINE-BETRIEB ERZWINGEN, SOBALD DAS MODELL LOKAL LIEGT
+#
+# Gemessen am 18.09.2026 auf einem zweiten Mac: Die fertige App hat beim
+# Start
+#     HEAD https://huggingface.co/BAAI/bge-m3/resolve/main/adapter_config.json
+# aufgerufen, fuenfmal wiederholt und dann das Vorladen abgebrochen. Das
+# passiert bei JEDEM Start, auch wenn das Modell vollstaendig auf der
+# Platte liegt: huggingface_hub fragt von sich aus nach, ob es eine
+# neuere Fassung gibt.
+#
+# Fuer dieses Produkt ist das kein Schoenheitsfehler:
+#   1. Wir verkaufen "nichts verlaesst Ihren Rechner". Eine Verbindung zu
+#      einem Server in den USA bei jedem Start widerspricht dem, und in
+#      der Datenschutzerklaerung steht sie nicht.
+#   2. Auf einem Rechner ohne Internet - oder wenn das Netz bei der
+#      Anmeldung noch nicht steht - kostet es Wartezeit und bricht das
+#      Vorladen ab, obwohl alles Noetige da ist.
+#
+# Die beiden Schalter unten werden gesetzt, SOBALD das Modell vollstaendig
+# vorliegt, und zwar beim Import - huggingface_hub liest sie einmalig beim
+# eigenen Import ein, spaeter gesetzt wirken sie nicht mehr. Fehlt das
+# Modell noch, bleiben sie aus, sonst koennte es nie heruntergeladen
+# werden.
+# ---------------------------------------------------------------------------
+
+def _offline_erzwingen_wenn_moeglich():
+    if modell_ist_vorhanden():
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        return True
+    return False
+
+
+_OFFLINE_AKTIV = _offline_erzwingen_wenn_moeglich()
+
+
 def _internet_erreichbar(timeout=5):
     try:
         with socket.create_connection(("huggingface.co", 443), timeout=timeout):
@@ -370,7 +407,13 @@ def lade_modell(fortschritt_fn=None):
         beobachter.start()
 
     try:
-        print("Lade KI-Modell (BGE-M3, CPU-Modus)...")
+        if not muss_geladen_werden:
+            # Zweite Absicherung, falls der Import oben noch vor dem
+            # Download gelaufen ist und das Modell erst danach kam.
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        quelle = "lokal" if not muss_geladen_werden else "wird geladen"
+        print(f"Lade KI-Modell (BGE-M3, CPU-Modus, {quelle})...")
         from sentence_transformers import SentenceTransformer
         return SentenceTransformer(MODELL_NAME, device="cpu")
     except ImportError as e:

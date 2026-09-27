@@ -1,6 +1,15 @@
 # Pakete, die SmartSearch unter Windows braucht.
-# Installation in der Windows-VM:
-#     py -m pip install -r requirements-windows.txt
+#
+# ZUERST: PYTHON 3.13 INSTALLIEREN, NICHT DIE NEUESTE FASSUNG.
+# Nicht Geschmackssache, sondern eine harte Grenze. Fuer Intel-Macs gibt
+# es onnxruntime nur bis Version 1.23.2, und die wiederum nur bis
+# Python 3.13. Damit alle drei Systeme - Mac mit Apple-Chip, Mac mit
+# Intel, Windows - denselben Stand fahren, gilt 3.13 ueberall.
+# Unter Windows liefe zwar auch 3.14, aber dann muesste die Umgebung
+# spaeter noch einmal neu aufgesetzt werden.
+#
+#     py -3.13 -m venv venv
+#     venv\Scripts\python -m pip install -r requirements-windows.txt
 #
 # Auf dem Mac wird diese Datei NICHT gebraucht - dort kommen zusaetzlich
 # die pyobjc-Pakete dazu, die es unter Windows gar nicht gibt.

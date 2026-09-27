@@ -27,6 +27,53 @@ ANFRAGEN = [
     "Strom",
 ]
 
+# ---------------------------------------------------------------------------
+# SOLL-ANTWORTEN
+#
+# Welches Dokument MUSS bei einer Anfrage an erster Stelle stehen. Ohne diese
+# Angabe zeigt die Diagnose nur, WAS gefunden wurde - ob es RICHTIG war, muss
+# man dann bei jedem Lauf im Kopf nachhalten. Beim Wechsel des Suchmodells ist
+# das der Unterschied zwischen einer Messung und einem Gefuehl.
+#
+# Inhalt der zehn Demo-Dokumente (nachgelesen, nicht geraten):
+#   Neues_Dokument_7.pdf    Kaufvertrag ueber einen gebrauchten PKW
+#   dok_2024_02_18.pdf      Kfz-Versicherungsschein
+#   Scan_20231114_0003.pdf  Mietvertrag ueber einen Garagenstellplatz
+#   Scan2019-03-22_112.pdf  Auftragsbestaetigung Internet und Telefon
+#   20220906_0001.pdf       Jahresabrechnung Strom
+#   IMG_4471.pdf            Wartungsprotokoll Gasbrennwerttherme
+#   Unbenannt-3.pdf         Garantiebestaetigung Waschvollautomat
+#   CCF_000141.pdf          Spendenbescheinigung
+#   0027_2607_001.pdf       Rechnung ueber ein Multifunktionssystem
+#   0044_1802_002.pdf       Reisekostenabrechnung
+#
+# None bedeutet: mehrere Dokumente sind gleichermassen richtig, dann wird
+# stattdessen geprueft, ob ALLE Dokumente aus MINDESTENS_DABEI gefunden wurden.
+# ---------------------------------------------------------------------------
+
+ERSTER_TREFFER = {
+    "Vertrag": None,
+    "Verträge": None,
+    "Auto": "Neues_Dokument_7.pdf",
+    "Fahrzeug": "Neues_Dokument_7.pdf",
+    "Versicherung fürs Auto": "dok_2024_02_18.pdf",
+    "Unterlagen rund ums Fahrzeug": "Neues_Dokument_7.pdf",
+    "Was zahle ich jeden Monat?": "Scan_20231114_0003.pdf",
+    "Drucker": "0027_2607_001.pdf",
+    "Heizung gewartet": "IMG_4471.pdf",
+    "Spende für die Steuererklärung": "CCF_000141.pdf",
+    "Waschmaschine": "Unbenannt-3.pdf",
+    "Strom": "20220906_0001.pdf",
+}
+
+# Diese Dokumente muessen unter den Treffern sein, egal an welcher Stelle.
+MINDESTENS_DABEI = {
+    "Vertrag": ["Neues_Dokument_7.pdf", "Scan_20231114_0003.pdf",
+                "Scan2019-03-22_112.pdf"],
+    "Verträge": ["Neues_Dokument_7.pdf", "Scan_20231114_0003.pdf",
+                 "Scan2019-03-22_112.pdf"],
+}
+
 
 def hauptteil():
     print("=" * 78)
@@ -62,6 +109,8 @@ def hauptteil():
     print("Modell wird geladen ...", flush=True)
     modell = s.geladenes_modell()
     print("geladen.\n")
+
+    bewertung = []   # (anfrage, bestanden, bemerkung)
 
     for anfrage in ANFRAGEN:
         woerter = s.anfrage_woerter(anfrage)
@@ -123,16 +172,61 @@ def hauptteil():
                     z[7] = f"Abstandsregel (< {grenze:.3f})"
 
         gezeigt = sum(1 for z in zeilen if not z[7])
+
+        # --- Abgleich mit der Soll-Antwort --------------------------------
+        treffer_namen = [z[0] for z in zeilen if not z[7]]
+        soll = ERSTER_TREFFER.get(anfrage)
+        pflicht = MINDESTENS_DABEI.get(anfrage, [])
+        if soll:
+            if not treffer_namen:
+                bestanden, bemerkung = False, f"kein Treffer, erwartet war {soll}"
+            elif treffer_namen[0] == soll:
+                bestanden, bemerkung = True, ""
+            elif soll in treffer_namen:
+                bestanden = False
+                bemerkung = (f"{soll} nur auf Platz "
+                             f"{treffer_namen.index(soll) + 1}, "
+                             f"davor {treffer_namen[0]}")
+            else:
+                bestanden, bemerkung = False, f"{soll} fehlt ganz"
+        elif pflicht:
+            fehlend = [d for d in pflicht if d not in treffer_namen]
+            bestanden = not fehlend
+            bemerkung = "" if bestanden else "fehlt: " + ", ".join(fehlend)
+        else:
+            bestanden, bemerkung = True, "(keine Soll-Antwort hinterlegt)"
+        bewertung.append((anfrage, bestanden, bemerkung))
+
         print("-" * 78)
         print(f"ANFRAGE: {anfrage!r}")
         print(f"  Suchwoerter: {woerter}")
         print(f"  ergibt {gezeigt} Treffer")
+        print(f"  Soll       : {'RICHTIG' if bestanden else 'FALSCH - ' + bemerkung}")
         print(f"  {'Datei':26} {'roh':>6} {'semN':>6} {'wört':>6} {'stichN':>7} {'gesamt':>7}  Status")
         for name, roh, semn, gef, anz, stich, ges, grund in zeilen:
             status = "ANGEZEIGT" if not grund else "raus: " + grund
             print(f"  {name:26} {roh:6.3f} {semn:6.3f} {gef:3d}/{anz:<2d} "
                   f"{stich:7.3f} {ges:7.3f}  {status}")
         print()
+
+    _zusammenfassung(bewertung)
+
+
+def _zusammenfassung(bewertung):
+    """Die eine Zahl, auf die es ankommt - ganz am Ende, damit sie im
+    Terminal stehen bleibt."""
+    richtig = sum(1 for _, ok, _ in bewertung if ok)
+    print("=" * 78)
+    print(f"ERGEBNIS: {richtig} von {len(bewertung)} Anfragen richtig")
+    print("=" * 78)
+    for anfrage, ok, bemerkung in bewertung:
+        if not ok:
+            print(f"  FALSCH  {anfrage!r}: {bemerkung}")
+    if richtig == len(bewertung):
+        print("  Alle Anfragen liefern das erwartete Dokument an erster Stelle.")
+    print()
+    print("Diese Zahl ist der Massstab. Vor jeder Aenderung an Modell,")
+    print("Schwellenwerten oder Chunking einmal notieren, danach vergleichen.")
 
 
 if __name__ == "__main__":

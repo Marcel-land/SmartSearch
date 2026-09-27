@@ -42,12 +42,29 @@ _ALTER_ORDNER = os.path.dirname(os.path.abspath(__file__))
 
 
 def _ermittle_daten_ordner():
-    """~/Library/Application Support/SmartSearch (macOS-Standard).
+    """Der Ort, den das jeweilige System fuer Programmdaten vorsieht.
 
-    Faellt auf ~/.smartsearch zurueck, falls die Library-Struktur wider
-    Erwarten nicht existiert - besser ein unuebliches Verzeichnis als ein
-    Absturz beim Start.
+    macOS:   ~/Library/Application Support/SmartSearch
+    Windows: %LOCALAPPDATA%\\SmartSearch
+    sonst:   ~/.smartsearch
+
+    Unter Windows ist das nicht nur Geschmackssache: LOCALAPPDATA ist der
+    Ordner, den ein Nutzer OHNE Administratorrechte beschreiben darf, und
+    den eine Firma bei servergespeicherten Profilen bewusst NICHT mit
+    synchronisiert. Ein Index von mehreren hundert Megabyte hat in einem
+    wandernden Profil nichts zu suchen - er wuerde bei jeder Anmeldung
+    durchs Netz kopiert.
+
+    Faellt in allen Faellen auf ~/.smartsearch zurueck, wenn der
+    vorgesehene Ort nicht existiert - besser ein unuebliches Verzeichnis
+    als ein Absturz beim Start.
     """
+    if os.name == "nt":
+        basis = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        if basis and os.path.isdir(basis):
+            return os.path.join(basis, APP_NAME)
+        return os.path.expanduser("~/.smartsearch")
+
     basis = os.path.expanduser("~/Library/Application Support")
     if not os.path.isdir(basis):
         return os.path.expanduser("~/.smartsearch")

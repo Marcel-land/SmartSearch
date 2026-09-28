@@ -22,7 +22,13 @@ py -3.13 -m venv venv
 venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-Beim ersten Suchen oder Indexieren lädt das Programm einmalig das Suchmodell herunter (etwa 2,3 GB).
+Danach einmal das Suchmodell holen. Es liegt nicht im Repository; geladen werden rund 415 MB, daraus entsteht die 100 MB große Fassung, die in die App kommt:
+
+```
+venv/bin/python -m werkzeuge.modell_holen
+```
+
+Unter Windows `venv\Scripts\python -m werkzeuge.modell_holen`. Die fertige App bringt das Modell mit, Nutzer laden nichts herunter.
 
 ## Starten
 
@@ -32,7 +38,7 @@ Immer im Projektordner:
 |---|---|---|
 | Programm | `venv/bin/python -m smartsearch` | `venv\Scripts\python -m smartsearch` |
 | Wortformen-Test (1 Sekunde) | `venv/bin/python -m tests.test_wortformen` | `venv\Scripts\python -m tests.test_wortformen` |
-| Suchdiagnose (mit Modell) | `venv/bin/python -m werkzeuge.such_diagnose` | `venv\Scripts\python -m werkzeuge.such_diagnose` |
+| Suchqualität messen | `venv/bin/python -m werkzeuge.such_diagnose --testdokumente` | `venv\Scripts\python -m werkzeuge.such_diagnose --testdokumente` |
 | Index untersuchen | `venv/bin/python -m werkzeuge.diagnose` | `venv\Scripts\python -m werkzeuge.diagnose` |
 
 Wichtig ist das `-m`. `python smartsearch/start.py` oder `python tests/test_wortformen.py` findet die eigenen Module nicht.
@@ -49,7 +55,7 @@ smartsearch/              das Programm
 │   ├── sprache.py          Suchwörter, deutsche Wortformen, Fundstellen
 │   ├── index.py            index.pkl lesen/schreiben/aufräumen
 │   ├── indexierung.py      Dateien einlesen, kompletter Indexlauf
-│   ├── modell.py           KI-Modell laden
+│   ├── modell.py           Suchmodell (ONNX) laden
 │   ├── dateien.py          Dateien finden, Text auslesen
 │   ├── ocr.py              Texterkennung für Scans
 │   ├── einstellungen.py    config.json, Favoriten, Suchverlauf

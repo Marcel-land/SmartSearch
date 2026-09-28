@@ -36,22 +36,37 @@ APP_VERSION = re.search(
     (ROOT / "smartsearch" / "version.py").read_text(encoding="utf-8"),
 ).group(1)
 
-torch_module = []
-torch_daten = []
-try:
-    torch_module = collect_submodules('torchgen')
-    torch_daten = collect_data_files('torchgen')
-except Exception:
-    pass
+# Das Suchmodell liegt in ressourcen/modell/ (nicht im Repository). In die
+# App kommen nur die Dateien aus modell.AUSLIEFERN - das grosse Quellmodell
+# (390 MB), aus dem die ausgelieferte Datei abgeleitet ist, bleibt draussen.
+# Fehlt etwas, bricht der Bau hier ab: eine App ohne Modell kann nicht suchen.
+import sys  # noqa: E402
+sys.path.insert(0, str(ROOT))
+from smartsearch.kern import modell  # noqa: E402
+if not modell.modell_ist_vorhanden():
+    raise SystemExit("Suchmodell fehlt - zuerst: venv/bin/python -m werkzeuge.modell_holen")
+modell_dateien = []
+for datei in modell.AUSLIEFERN:
+    quelle = pathlib.Path(modell.modell_pfad(datei))
+    if not quelle.is_file():
+        raise SystemExit(f"Suchmodell unvollstaendig, es fehlt: {quelle}")
+    ziel = pathlib.Path('ressourcen') / modell.MODELL_ORDNER / datei
+    modell_dateien.append((str(quelle), str(ziel.parent)))
+
+# onnxruntime bringt eigene Bibliotheken mit, die PyInstaller nur ueber
+# collect_dynamic_libs sicher findet.
+from PyInstaller.utils.hooks import collect_dynamic_libs  # noqa: E402
+ort_bibliotheken = collect_dynamic_libs('onnxruntime')
 
 a = Analysis(
     [str(ROOT / 'smartsearch' / '__main__.py')],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=ort_bibliotheken,
     datas=[(str(ROOT / 'LICENSE.txt'), '.'),
-           (str(ROOT / 'ressourcen'), 'ressourcen')] + torch_daten,
+           (str(ROOT / 'ressourcen' / 'icons'), 'ressourcen/icons')] + modell_dateien,
     hiddenimports=[
-        'sentence_transformers',
+        'onnxruntime',
+        'tokenizers',
         'customtkinter',
         'pypdf',
         'pdfplumber',
@@ -68,15 +83,20 @@ a = Analysis(
         # Texterkennung. Das Programm tesseract.exe muss zusaetzlich
         # installiert sein, das Paket allein reicht nicht.
         'pytesseract',
-    ] + torch_module,
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
+    # PyTorch & Co. stehen bewusst hier: seit dem Wechsel auf onnxruntime
+    # braucht SmartSearch sie nicht mehr, in einem aelteren venv koennen sie
+    # aber noch installiert sein - dann wuerden sie still 2 GB mitgepackt.
     excludes=[
         'matplotlib', 'IPython', 'jupyter', 'notebook', 'nbconvert',
         'pytest', 'sphinx', 'setuptools._distutils',
         'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'wx',
         'tkinter.test',
+        'torch', 'torchgen', 'torchvision', 'transformers',
+        'sentence_transformers', 'sklearn', 'scipy',
         # Die Mac-Teile duerfen hier nicht mit hinein - sie existieren
         # unter Windows nicht und wuerden den Bau abbrechen.
         'Vision', 'Foundation', 'objc', 'AppKit', 'smartsearch.plattform.mac',

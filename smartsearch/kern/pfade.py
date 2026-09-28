@@ -89,6 +89,12 @@ def _ermittle_daten_ordner():
     vorgesehene Ort nicht existiert - besser ein unuebliches Verzeichnis
     als ein Absturz beim Start.
     """
+    # Fuer Messungen und Tests: ein eigener, leerer Datenordner, damit der
+    # echte Index des Nutzers nicht angefasst wird (werkzeuge/modellvergleich.py).
+    eigener = os.environ.get("SMARTSEARCH_DATENORDNER")
+    if eigener:
+        return os.path.abspath(os.path.expanduser(eigener))
+
     if os.name == "nt":
         basis = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
         if basis and os.path.isdir(basis):

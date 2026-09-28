@@ -1,5 +1,9 @@
 # Umgebung und Bauergebnisse
 venv/
+venv-*/
+
+# Suchmodell (rund 100 MB) - kommt ueber werkzeuge/modell_holen.py
+ressourcen/modell/
 dist/
 build/
 __pycache__/
@@ -55,7 +59,7 @@ _update.tar.gz
 SmartSearch Pro.spec
 # Lokale Hilfsskripte und Ausgaben
 commit_*.command
-such-diagnose.txt
+such-diagnose*.txt
 
 # Uebergabe-Ordner fuer Git-Buendel (Claude-Sitzungen)
 _uebergabe/

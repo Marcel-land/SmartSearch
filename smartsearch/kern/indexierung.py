@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from smartsearch.kern.dateien import dateien_im_ordner, in_abschnitte_teilen, lies_datei
 from smartsearch.kern.index import bereinige_index, lade_bestehenden_index, speichere_index
-from smartsearch.kern.modell import geladenes_modell, modell_ist_vorhanden
+from smartsearch.kern.modell import geladenes_modell
 
 # Anzahl paralleler Threads beim Einlesen der Dateien (Text-Extraktion/OCR).
 # Diese Arbeit ist größtenteils I/O bzw. läuft in C-Bibliotheken
@@ -156,36 +156,23 @@ def alles_indexieren(ordner_liste, soll_abbrechen, melden):
                          zwischen zwei Ordnern abgefragt.
     melden(ereignis)  -> bekommt den Fortschritt als Woerterbuch:
 
-        {"art": "modell_download_start"}
-        {"art": "modell_download", "anteil": 0..1, "geladen": Bytes, "gesamt": Bytes}
         {"art": "datei", "anteil": 0..1, "n": 3, "gesamt": 120, "name": "...",
          "restzeit_sek": 95.0}
         {"art": "vektoren", "batch": 4, "batches": 9, "restzeit_sek": 30.0}
 
     Rueckgabe: True, wenn der Lauf vollstaendig war, False bei Abbruch.
 
-    Wirft modell.ModellDownloadFehler / modell.ProgrammUnvollstaendig,
-    wenn das Modell nicht geladen werden kann - die Oberflaeche erklaert
-    diese beiden Faelle eigens.
+    Wirft modell.ProgrammUnvollstaendig, wenn das mitgelieferte Modell
+    fehlt - die Oberflaeche erklaert diesen Fall eigens.
 
     Stand vorher in gui.py (_index_bg) und war dort mit dem Zeichnen der
     Statuszeile verwoben. Jetzt rechnet diese Funktion, die Oberflaeche
     zeigt nur an - bei der Umstellung auf eine neue Oberflaeche bleibt sie
     unveraendert.
     """
-    # Beim allerersten Start muss erst das KI-Modell geladen werden
-    # (einmalig ca. 2,3 GB). Ohne sichtbaren Fortschritt sieht die App
-    # dabei minutenlang aus, als haenge sie - deshalb wird der Download
-    # genauso gemeldet wie spaeter die Indexierung.
-    def modell_fortschritt(geladen, gesamt):
-        anteil = min(geladen / gesamt, 0.99) if gesamt else 0
-        melden({"art": "modell_download", "anteil": anteil,
-                "geladen": geladen, "gesamt": gesamt})
-
-    if not modell_ist_vorhanden():
-        melden({"art": "modell_download_start"})
-
-    modell = geladenes_modell(fortschritt_fn=modell_fortschritt)
+    # Das Modell wird mit der App ausgeliefert - es gibt keinen Download
+    # mehr, der gemeldet werden muesste (siehe kern/modell.py).
+    modell = geladenes_modell()
 
     # Gesamtzahl vorab zaehlen, fuer einen korrekten Prozentwert ueber alle
     # Ordner hinweg.

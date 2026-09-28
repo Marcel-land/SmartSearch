@@ -25,34 +25,41 @@ APP_VERSION = re.search(
     (ROOT / "smartsearch" / "version.py").read_text(encoding="utf-8"),
 ).group(1)
 
-# torchgen gehoert zu PyTorch und wird beim Laden eines Modells nachgeladen.
-# Es stand hier frueher unter excludes, weil der Name nach Testcode aussieht -
-# das war falsch: auf einem Rechner ohne separat installiertes PyTorch fehlte
-# es dann im Bundle und der erste Start scheiterte mit
-# "No module named 'torchgen'". Das Paket bringt ausserdem YAML-Dateien mit,
-# die mitkopiert werden muessen; ohne sie faellt es beim Import auseinander.
-# Sollte die Umgebung torchgen nicht kennen, wird hier still uebersprungen -
-# der Bau darf daran nicht scheitern.
-torch_module = []
-torch_daten = []
-try:
-    torch_module = collect_submodules('torchgen')
-    torch_daten = collect_data_files('torchgen')
-except Exception:
-    pass
+# Das Suchmodell liegt in ressourcen/modell/ (nicht im Repository). In die
+# App kommen nur die Dateien aus modell.AUSLIEFERN - das grosse Quellmodell
+# (390 MB), aus dem die ausgelieferte Datei abgeleitet ist, bleibt draussen.
+# Fehlt etwas, bricht der Bau hier ab: eine App ohne Modell kann nicht suchen.
+import sys  # noqa: E402
+sys.path.insert(0, str(ROOT))
+from smartsearch.kern import modell  # noqa: E402
+if not modell.modell_ist_vorhanden():
+    raise SystemExit("Suchmodell fehlt - zuerst: venv/bin/python -m werkzeuge.modell_holen")
+modell_dateien = []
+for datei in modell.AUSLIEFERN:
+    quelle = pathlib.Path(modell.modell_pfad(datei))
+    if not quelle.is_file():
+        raise SystemExit(f"Suchmodell unvollstaendig, es fehlt: {quelle}")
+    ziel = pathlib.Path('ressourcen') / modell.MODELL_ORDNER / datei
+    modell_dateien.append((str(quelle), str(ziel.parent)))
+
+# onnxruntime bringt eigene Bibliotheken mit, die PyInstaller nur ueber
+# collect_dynamic_libs sicher findet.
+from PyInstaller.utils.hooks import collect_dynamic_libs  # noqa: E402
+ort_bibliotheken = collect_dynamic_libs('onnxruntime')
 
 a = Analysis(
     [str(ROOT / 'smartsearch' / '__main__.py')],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=ort_bibliotheken,
     # LICENSE.txt liegt im fertigen Bundle bei - eine App ohne
     # beiliegende Nutzungsbedingungen sollte man nicht verteilen.
     # ressourcen/ (Symbole) liest das Programm zur Laufzeit ueber
     # pfade.ressource() - siehe dort.
     datas=[(str(ROOT / 'LICENSE.txt'), '.'),
-           (str(ROOT / 'ressourcen'), 'ressourcen')] + torch_daten,
+           (str(ROOT / 'ressourcen' / 'icons'), 'ressourcen/icons')] + modell_dateien,
     hiddenimports=[
-        'sentence_transformers',
+        'onnxruntime',
+        'tokenizers',
         'customtkinter',
         'pypdf',
         'pdfplumber',
@@ -67,7 +74,7 @@ a = Analysis(
         'Vision',
         'Foundation',
         'objc',
-    ] + torch_module,
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -75,15 +82,16 @@ a = Analysis(
     # nur Pakete, die SmartSearch nachweislich nicht benutzt. Sparen
     # zusammen mehrere hundert Megabyte im fertigen Bundle.
     #
-    # Hier gehoert nichts hin, was zu PyTorch gehoert. Was nach Testcode
-    # aussieht, ist es dort oft nicht: torch.testing enthaelt Funktionen,
-    # die PyTorch im normalen Betrieb selbst aufruft. Die eingesparten
-    # Megabyte sind den Ausfall beim ersten Start nicht wert.
+    # PyTorch & Co. stehen bewusst hier: seit dem Wechsel auf onnxruntime
+    # braucht SmartSearch sie nicht mehr, in einem aelteren venv koennen sie
+    # aber noch installiert sein - dann wuerden sie still 2 GB mitgepackt.
     excludes=[
         'matplotlib', 'IPython', 'jupyter', 'notebook', 'nbconvert',
         'pytest', 'sphinx', 'setuptools._distutils',
         'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'wx',
         'tkinter.test',
+        'torch', 'torchgen', 'torchvision', 'transformers',
+        'sentence_transformers', 'sklearn', 'scipy',
     ],
     noarchive=False,
     optimize=0,

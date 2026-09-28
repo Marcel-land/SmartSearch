@@ -60,12 +60,12 @@ if [ -z "$VIRTUAL_ENV" ]; then
 fi
 
 fehlt=""
-for modul in PyInstaller sentence_transformers customtkinter pypdfium2; do
+for modul in PyInstaller onnxruntime tokenizers customtkinter pypdfium2; do
     python3 -c "import $modul" 2>/dev/null || fehlt="$fehlt $modul"
 done
 if [ -n "$fehlt" ]; then
     rot "Diese Pakete fehlen:$fehlt"
-    echo "  pip install pyinstaller sentence-transformers customtkinter pypdfium2"
+    echo "  venv/bin/python -m pip install -r requirements.txt"
     exit 1
 fi
 
@@ -80,6 +80,12 @@ if ! python3 -c "import Vision" 2>/dev/null; then
     echo
     read -r -p "  Trotzdem weiterbauen? [j/N] " antwort
     [ "$antwort" = "j" ] || exit 1
+fi
+
+# Das Suchmodell gehoert in die App, liegt aber nicht im Repository.
+if ! python3 -c "from smartsearch.kern import modell; raise SystemExit(0 if modell.modell_ist_vorhanden() else 1)"; then
+    echo "  Suchmodell fehlt - wird geladen und verkleinert (einmalig, rund 415 MB Download)"
+    python3 -m werkzeuge.modell_holen || { rot "Suchmodell konnte nicht geladen werden."; exit 1; }
 fi
 
 echo "  Alle Voraussetzungen erfuellt"

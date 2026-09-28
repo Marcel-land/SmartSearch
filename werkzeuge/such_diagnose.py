@@ -5,16 +5,41 @@ die Suche verwirft - zusammen mit allen Zwischenwerten und der Regel,
 an der es gescheitert ist. Nur so laesst sich sehen, wo die Schwellen
 sitzen muessen.
 
-Aufruf (im Projektordner):  venv/bin/python -m werkzeuge.such_diagnose
+Aufruf (im Projektordner):
+
+    venv/bin/python -m werkzeuge.such_diagnose
+        prueft den Index, mit dem die App gerade arbeitet
+
+    venv/bin/python -m werkzeuge.such_diagnose --testdokumente
+        baut in einem eigenen, leeren Datenordner einen frischen Index aus
+        tests/testdokumente und prueft den. Der echte Index bleibt
+        unberuehrt. Das ist die Messung, die zaehlt: sie haengt nicht davon
+        ab, was gerade in der App eingelesen ist.
+
+Welche Modelldatei benutzt wird, laesst sich fuer Messungen umstellen:
+    SMARTSEARCH_MODELLDATEI=onnx/model.onnx venv/bin/python -m werkzeuge.such_diagnose --testdokumente
 """
 import os
-import numpy as np
+import sys
+import tempfile
+import time
 
-from smartsearch.kern import suche as s
-from smartsearch.kern.index import index_mit_matrix
-from smartsearch.kern.modell import geladenes_modell
-from smartsearch.kern.pfade import INDEX_FILE
-from smartsearch.kern.sprache import anfrage_woerter, wort_trifft
+# Muss VOR dem ersten Import aus smartsearch stehen: pfade.py legt den
+# Datenordner beim Import fest.
+TESTMODUS = "--testdokumente" in sys.argv
+if TESTMODUS and not os.environ.get("SMARTSEARCH_DATENORDNER"):
+    os.environ["SMARTSEARCH_DATENORDNER"] = tempfile.mkdtemp(prefix="smartsearch-messung-")
+
+import numpy as np  # noqa: E402
+
+from smartsearch.kern import suche as s  # noqa: E402
+from smartsearch.kern import modell as modell_modul  # noqa: E402
+from smartsearch.kern.index import gueltige_paare, index_mit_matrix  # noqa: E402
+from smartsearch.kern.modell import geladenes_modell  # noqa: E402
+from smartsearch.kern.pfade import INDEX_FILE, PROJEKT_ORDNER  # noqa: E402
+from smartsearch.kern.sprache import anfrage_woerter, wort_trifft  # noqa: E402
+
+TESTORDNER = os.path.join(PROJEKT_ORDNER, "tests", "testdokumente")
 
 ANFRAGEN = [
     "Vertrag",
@@ -79,10 +104,28 @@ MINDESTENS_DABEI = {
 }
 
 
+def _testindex_bauen():
+    """Frischer Index aus tests/testdokumente im eigenen Datenordner."""
+    from smartsearch.kern import indexierung, ordner
+    ordner.befehl_ordner_hinzufuegen(TESTORDNER)
+    start = time.time()
+    indexierung.alles_indexieren([TESTORDNER], soll_abbrechen=lambda: False, melden=lambda e: None)
+    return time.time() - start
+
+
 def hauptteil():
     print("=" * 78)
     print("SUCHDIAGNOSE")
     print("=" * 78)
+    print(f"Modell    : {modell_modul.MODELL_NAME}")
+    print(f"Datei     : {modell_modul.MODELL_DATEI}")
+    if TESTMODUS:
+        print(f"Testmodus : frischer Index aus {TESTORDNER}")
+        print("            (eigener Datenordner, der echte Index bleibt unberuehrt)")
+        t0 = time.time()
+        geladenes_modell()
+        print(f"Laden     : {time.time() - t0:.1f} s")
+        print(f"Indexieren: {_testindex_bauen():.1f} s")
     print(f"Indexdatei: {INDEX_FILE}")
     print(f"vorhanden : {os.path.exists(INDEX_FILE)}")
     if os.path.exists(INDEX_FILE):
@@ -104,9 +147,16 @@ def hauptteil():
         print("Index ist leer oder unlesbar - bitte erst 'Index aktualisieren'.")
         return
 
+    # Nur, was die App auch zeigen wuerde: Dateien aus Ordnern, die gerade
+    # ueberwacht werden und die es noch gibt. Frueher las die Diagnose den
+    # Index ungefiltert - nach dem Umzug des Projektordners meldete sie
+    # 11 von 12, waehrend die App selbst gar nichts mehr fand.
     nach_datei = {}
-    for i, e in enumerate(eintraege):
+    for i, e in gueltige_paare(list(enumerate(eintraege))):
         nach_datei.setdefault(e["datei"], []).append((i, e))
+    if not nach_datei:
+        print("Kein Eintrag gehoert zu einem ueberwachten Ordner, der noch existiert.")
+        return
     print(f"Dokumente im Index: {len(nach_datei)}   Textabschnitte: {len(eintraege)}")
     print()
 
@@ -115,11 +165,15 @@ def hauptteil():
     print("geladen.\n")
 
     bewertung = []   # (anfrage, bestanden, bemerkung)
+    roh_richtig, roh_uebrig = [], []   # Rohwerte fuer die Kalibrierung
+    zeit_anfragen = 0.0
 
     for anfrage in ANFRAGEN:
         woerter = anfrage_woerter(anfrage)
+        t0 = time.time()
         vektor = np.asarray(
             modell.encode([anfrage], normalize_embeddings=True)[0], dtype="float32")
+        zeit_anfragen += time.time() - t0
         werte = matrix @ vektor if matrix is not None else None
 
         zeilen = []
@@ -200,6 +254,9 @@ def hauptteil():
         else:
             bestanden, bemerkung = True, "(keine Soll-Antwort hinterlegt)"
         bewertung.append((anfrage, bestanden, bemerkung))
+        richtige = {soll} if soll else set(pflicht)
+        for z in zeilen:
+            (roh_richtig if z[0] in richtige else roh_uebrig).append(z[1])
 
         print("-" * 78)
         print(f"ANFRAGE: {anfrage!r}")
@@ -214,6 +271,23 @@ def hauptteil():
         print()
 
     _zusammenfassung(bewertung)
+    _kalibrierung(roh_richtig, roh_uebrig, zeit_anfragen / max(len(ANFRAGEN), 1))
+
+
+def _kalibrierung(richtig, uebrig, zeit_je_anfrage):
+    """Wo liegen die Rohwerte dieses Modells? Die Schwellen in
+    kern/suche.py (SEMANTIK_UNTERGRENZE/-OBERGRENZE/-MINDEST_OHNE_TREFFER)
+    muessen zum Modell passen - jedes Modell hat seinen eigenen Bereich.
+    Bei BGE-M3 lagen richtige Dokumente bei 0,49-0,57, uebrige bei
+    0,30-0,47. Ein neues Modell braucht neue Werte."""
+    if not richtig or not uebrig:
+        return
+    print()
+    print("Rohwerte dieses Modells (Aehnlichkeit Anfrage <-> bester Abschnitt):")
+    print(f"  richtige Dokumente : {min(richtig):.3f} bis {max(richtig):.3f}  (Mittel {np.mean(richtig):.3f})")
+    print(f"  uebrige Dokumente  : {min(uebrig):.3f} bis {max(uebrig):.3f}  (Mittel {np.mean(uebrig):.3f})")
+    print(f"  gesamter Bereich   : {min(richtig + uebrig):.3f} bis {max(richtig + uebrig):.3f}")
+    print(f"  Zeit je Anfrage    : {zeit_je_anfrage * 1000:.0f} ms")
 
 
 def _zusammenfassung(bewertung):

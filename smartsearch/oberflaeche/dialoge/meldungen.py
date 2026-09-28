@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """dialoge/meldungen.py - kleinere Hinweisfenster: neue Fassung verfuegbar,
-Suchmodell konnte nicht geladen werden, Programmteil fehlt."""
+Programmteil (z. B. das Suchmodell) fehlt."""
 
 import webbrowser
 
@@ -49,53 +49,6 @@ def update_verfuegbar(app, neue_version, download_url, notizen):
     ctk.CTkButton(
         button_zeile, text=t("update.download_button"), fg_color=farben.SEITE_KNOPF, hover_color=farben.SEITE_KNOPF_HOVER,
         command=herunterladen
-    ).pack(side="right")
-
-
-def modell_download_fehlgeschlagen(app, fehler):
-    """Erklaert den einen Fall, der einen neuen Nutzer sonst ratlos
-    zuruecklaesst: die App wurde gerade installiert, das KI-Modell fehlt
-    noch, und es ist kein Internet da."""
-    app._buttons_entsperren()
-    app.verstecke_fortschritt()
-    app.setze_status(t("model.download_failed_status"))
-
-    app.attributes("-topmost", False)
-    top = ctk.CTkToplevel(app)
-    top.title(t("model.download_failed_title"))
-    top.geometry("460x260")
-    top.attributes("-topmost", True)
-    app.nebenfenster_anmelden(top)
-
-    ctk.CTkLabel(
-        top, text=t("model.download_failed_heading"), font=("Helvetica", 15, "bold")
-    ).pack(padx=20, pady=(20, 8), anchor="w")
-
-    ctk.CTkLabel(
-        top, text=t("model.download_failed_body"), font=("Helvetica", 11),
-        text_color="#78909c", justify="left", wraplength=410
-    ).pack(padx=20, pady=(0, 10), anchor="w")
-
-    ctk.CTkLabel(
-        top, text=t("model.download_failed_details", fehler=fehler),
-        font=("Helvetica", 10), text_color="#90a4ae", justify="left", wraplength=410
-    ).pack(padx=20, pady=(0, 12), anchor="w")
-
-    zeile = ctk.CTkFrame(top, fg_color="transparent")
-    zeile.pack(side="bottom", fill="x", padx=20, pady=16)
-
-    ctk.CTkButton(
-        zeile, text=t("model.download_failed_close"), fg_color="transparent",
-        hover_color=("#e0e0e0", "#3a3a3a"), command=top.destroy
-    ).pack(side="left")
-
-    def erneut_versuchen():
-        top.destroy()
-        app.index_aktualisieren()
-
-    ctk.CTkButton(
-        zeile, text=t("model.download_failed_retry"), fg_color=farben.SEITE_KNOPF,
-        hover_color=farben.SEITE_KNOPF_HOVER, command=erneut_versuchen
     ).pack(side="right")
 
 

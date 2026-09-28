@@ -42,6 +42,23 @@ SCORE_SCHWELLE = 0.15
 #
 # Mit den Werten unten und der Wortform-Erkennung in _wort_trifft()
 # wird in derselben Messung jeder erwartete Treffer gefunden.
+#
+# NEU EINGESTELLT AM 28.09.2026 FUER granite-embedding (kern/modell.py).
+# Jedes Modell hat seinen eigenen Wertebereich - die BGE-M3-Werte oben
+# passen nicht mehr. Gemessen mit such_diagnose --testdokumente:
+#     richtige Dokumente 0,785 bis 0,871, uebrige 0,670 bis 0,823,
+#     gesamter Bereich 0,67 bis 0,87 (BGE-M3: 0,30 bis 0,64).
+# Eine Rasterpruefung ueber 600 Kombinationen (Untergrenze 0,62-0,74,
+# Obergrenze 0,84-0,90, Sperre 0,70-0,79, Abstand 0,55-0,80, Gewichte
+# 0,65/0,75) ergab ueberall 11 von 12, ausser bei einer Sperre ab 0,79 -
+# die Einstellung sitzt also nicht auf einer Messerkante. Innerhalb dieses
+# Plateaus sind die Werte so gewaehlt, dass moeglichst wenige unpassende
+# Dokumente mit angezeigt werden: 21 Treffer ueber alle zwoelf Anfragen
+# (BGE-M3 vorher: 24). Einziger Fehler: "Auto" zeigt die Kfz-Versicherung
+# vor dem Kaufvertrag - beide sind richtig, nur die Reihenfolge weicht von
+# der Soll-Antwort ab. Dafuer findet "Drucker" jetzt die Rechnung ueber das
+# Multifunktionssystem an erster Stelle, woran BGE-M3 scheiterte.
+# Messprotokoll: docs/messungen/.
 # ------------------------------------------------------------------
 
 # 1. Enthaelt ein Dokument KEINES der Suchwoerter woertlich, muss es
@@ -52,7 +69,7 @@ SCORE_SCHWELLE = 0.15
 #    die Rechnung kam auf 0,417 und lag damit unter der alten Sperre von
 #    0,60. Der neue Wert liegt unter allen gemessenen richtigen Treffern
 #    und ueber dem, was das Modell fuer voellig fremde Texte liefert.
-SEMANTIK_MINDEST_OHNE_TREFFER = 0.40
+SEMANTIK_MINDEST_OHNE_TREFFER = 0.75   # BGE-M3: 0.40
 
 # Nutzbarer Wertebereich des Modells auf echten Dokumenten. Auf diesen
 # Bereich wird der rohe Aehnlichkeitswert gespreizt, bevor er mit der
@@ -60,8 +77,8 @@ SEMANTIK_MINDEST_OHNE_TREFFER = 0.40
 # Semantik rechnerisch kleingehalten und die woertliche Suche gewinnt
 # immer - vorher lag die Spreizung bei 0,42 bis 0,82, also fast
 # vollstaendig oberhalb der tatsaechlichen Werte.
-SEMANTIK_UNTERGRENZE = 0.32
-SEMANTIK_OBERGRENZE = 0.62
+SEMANTIK_UNTERGRENZE = 0.72   # BGE-M3: 0.32
+SEMANTIK_OBERGRENZE = 0.87    # BGE-M3: 0.62
 
 # Verhaeltnis von inhaltlicher zu woertlicher Uebereinstimmung. Wer ein
 # Wort eintippt, das woertlich im Dokument steht, erwartet es weit oben -
@@ -76,7 +93,7 @@ GEWICHT_STICHWORT = 0.35
 #    stehen, bei einer schlechten nur der beste - oder gar keiner. Diese
 #    Regel erledigt die eigentliche Auslese; die absoluten Schwellen oben
 #    halten nur noch offensichtlichen Unsinn fern.
-RELATIVER_ABSTAND = 0.65
+RELATIVER_ABSTAND = 0.75   # BGE-M3: 0.65
 
 
 def _zeitraum_cutoff(zeitraum):

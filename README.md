@@ -39,6 +39,7 @@ Immer im Projektordner:
 | Programm | `venv/bin/python -m smartsearch` | `venv\Scripts\python -m smartsearch` |
 | Wortformen-Test (1 Sekunde) | `venv/bin/python -m tests.test_wortformen` | `venv\Scripts\python -m tests.test_wortformen` |
 | Suchqualität messen | `venv/bin/python -m werkzeuge.such_diagnose --testdokumente` | `venv\Scripts\python -m werkzeuge.such_diagnose --testdokumente` |
+| Testdokumente neu erzeugen | `venv/bin/python -m werkzeuge.testdokumente` | `venv\Scripts\python -m werkzeuge.testdokumente` |
 | Index untersuchen | `venv/bin/python -m werkzeuge.diagnose` | `venv\Scripts\python -m werkzeuge.diagnose` |
 
 Wichtig ist das `-m`. `python smartsearch/start.py` oder `python tests/test_wortformen.py` findet die eigenen Module nicht.
@@ -79,7 +80,7 @@ ressourcen/icons/         Programmsymbole
 bauen/mac/                Spec, build.sh, Doppelklick-Helfer
 bauen/windows/            Spec (später WiX-Installer)
 werkzeuge/                Diagnose-Skripte
-tests/                    Tests und Testdokumente
+tests/                    Tests, 50 Testdokumente, Soll-Antworten (suchfaelle.py)
 docs/                     ARCHITEKTUR.md, RELEASE.md, TESTANLEITUNG.md
 ```
 

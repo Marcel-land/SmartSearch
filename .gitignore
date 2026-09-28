@@ -46,6 +46,8 @@ website/
 *.mov
 *.aiff
 *.docx
+# ... ausser den erfundenen Testdokumenten, die gehoeren dazu
+!tests/testdokumente/**/*.docx
 STIMME ERZEUGEN.command
 smartsearch-fenster.png
 icon_rundlos.png

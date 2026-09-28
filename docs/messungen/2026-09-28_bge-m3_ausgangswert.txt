@@ -1,0 +1,235 @@
+Ausgangswert vor dem Modellwechsel - BGE-M3 ueber PyTorch, Python 3.14, Fassung 1.0.6
+Gemessen am 28.09.2026 mit werkzeuge/such_diagnose.py auf den zehn Testdokumenten.
+
+==============================================================================
+SUCHDIAGNOSE
+==============================================================================
+Indexdatei: /Users/marcellandmann/Library/Application Support/SmartSearch/index.pkl
+vorhanden : True
+Stand     : 27.09.2026 16:26
+
+Geltende Werte:
+  SCORE_SCHWELLE                = 0.15
+  SEMANTIK_MINDEST_OHNE_TREFFER = 0.4
+  SEMANTIK_UNTERGRENZE          = 0.32
+  SEMANTIK_OBERGRENZE           = 0.62
+  GEWICHT_SEMANTIK / STICHWORT  = 0.65 / 0.35
+  RELATIVER_ABSTAND             = 0.65
+
+Dokumente im Index: 10   Textabschnitte: 26
+
+Modell wird geladen ...
+Lade KI-Modell (BGE-M3, CPU-Modus, lokal)...
+geladen.
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Vertrag'
+  Suchwoerter: ['vertrag']
+  ergibt 4 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Neues_Dokument_7.pdf        0.493  0.575   1/1    1.000   0.724  ANGEZEIGT
+  Scan2019-03-22_112.pdf      0.486  0.554   1/1    1.000   0.710  ANGEZEIGT
+  20220906_0001.pdf           0.457  0.458   1/1    1.000   0.647  ANGEZEIGT
+  Scan_20231114_0003.pdf      0.432  0.372   1/1    1.000   0.592  ANGEZEIGT
+  Unbenannt-3.pdf             0.436  0.387   0/1    0.000   0.251  raus: Abstandsregel (< 0.470)
+  0044_1802_002.pdf           0.408  0.295   0/1    0.000   0.192  raus: Abstandsregel (< 0.470)
+  IMG_4471.pdf                0.401  0.271   0/1    0.000   0.176  raus: Abstandsregel (< 0.470)
+  dok_2024_02_18.pdf          0.397  0.258   0/1    0.000   0.168  raus: Semantik-Sperre (0.397 < 0.4)
+  CCF_000141.pdf              0.393  0.245   0/1    0.000   0.159  raus: Semantik-Sperre (0.393 < 0.4)
+  0027_2607_001.pdf           0.391  0.236   0/1    0.000   0.154  raus: Semantik-Sperre (0.391 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Verträge'
+  Suchwoerter: ['verträge']
+  ergibt 4 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Scan2019-03-22_112.pdf      0.454  0.445   1/1    1.000   0.640  ANGEZEIGT
+  Neues_Dokument_7.pdf        0.451  0.437   1/1    1.000   0.634  ANGEZEIGT
+  20220906_0001.pdf           0.420  0.334   1/1    1.000   0.567  ANGEZEIGT
+  Scan_20231114_0003.pdf      0.402  0.273   1/1    1.000   0.527  ANGEZEIGT
+  0044_1802_002.pdf           0.390  0.232   0/1    0.000   0.151  raus: Semantik-Sperre (0.390 < 0.4)
+  IMG_4471.pdf                0.389  0.232   0/1    0.000   0.151  raus: Semantik-Sperre (0.389 < 0.4)
+  Unbenannt-3.pdf             0.377  0.189   0/1    0.000   0.123  raus: Semantik-Sperre (0.377 < 0.4)
+  0027_2607_001.pdf           0.375  0.182   0/1    0.000   0.118  raus: Semantik-Sperre (0.375 < 0.4)
+  CCF_000141.pdf              0.348  0.095   0/1    0.000   0.062  raus: Semantik-Sperre (0.348 < 0.4)
+  dok_2024_02_18.pdf          0.341  0.072   0/1    0.000   0.046  raus: Semantik-Sperre (0.341 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Auto'
+  Suchwoerter: ['auto']
+  ergibt 2 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Neues_Dokument_7.pdf        0.456  0.452   0/1    0.000   0.294  ANGEZEIGT
+  dok_2024_02_18.pdf          0.422  0.339   0/1    0.000   0.221  ANGEZEIGT
+  IMG_4471.pdf                0.396  0.253   0/1    0.000   0.165  raus: Semantik-Sperre (0.396 < 0.4)
+  0027_2607_001.pdf           0.388  0.225   0/1    0.000   0.146  raus: Semantik-Sperre (0.388 < 0.4)
+  Unbenannt-3.pdf             0.381  0.205   0/1    0.000   0.133  raus: Semantik-Sperre (0.381 < 0.4)
+  Scan_20231114_0003.pdf      0.358  0.127   0/1    0.000   0.083  raus: Semantik-Sperre (0.358 < 0.4)
+  20220906_0001.pdf           0.354  0.113   0/1    0.000   0.073  raus: Semantik-Sperre (0.354 < 0.4)
+  0044_1802_002.pdf           0.342  0.074   0/1    0.000   0.048  raus: Semantik-Sperre (0.342 < 0.4)
+  CCF_000141.pdf              0.339  0.062   0/1    0.000   0.040  raus: Semantik-Sperre (0.339 < 0.4)
+  Scan2019-03-22_112.pdf      0.328  0.027   0/1    0.000   0.018  raus: Semantik-Sperre (0.328 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Fahrzeug'
+  Suchwoerter: ['fahrzeug']
+  ergibt 2 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Neues_Dokument_7.pdf        0.545  0.749   1/1    1.000   0.837  ANGEZEIGT
+  dok_2024_02_18.pdf          0.528  0.694   1/1    1.000   0.801  ANGEZEIGT
+  Scan_20231114_0003.pdf      0.437  0.390   0/1    0.000   0.254  raus: Abstandsregel (< 0.544)
+  Unbenannt-3.pdf             0.436  0.387   0/1    0.000   0.251  raus: Abstandsregel (< 0.544)
+  IMG_4471.pdf                0.436  0.386   0/1    0.000   0.251  raus: Abstandsregel (< 0.544)
+  0027_2607_001.pdf           0.432  0.372   0/1    0.000   0.242  raus: Abstandsregel (< 0.544)
+  CCF_000141.pdf              0.423  0.344   0/1    0.000   0.224  raus: Abstandsregel (< 0.544)
+  0044_1802_002.pdf           0.406  0.288   0/1    0.000   0.187  raus: Abstandsregel (< 0.544)
+  20220906_0001.pdf           0.402  0.272   0/1    0.000   0.177  raus: Abstandsregel (< 0.544)
+  Scan2019-03-22_112.pdf      0.382  0.207   0/1    0.000   0.135  raus: Semantik-Sperre (0.382 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Versicherung fürs Auto'
+  Suchwoerter: ['versicherung', 'auto']
+  ergibt 1 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  dok_2024_02_18.pdf          0.554  0.778   1/2    0.500   0.681  ANGEZEIGT
+  Neues_Dokument_7.pdf        0.490  0.567   0/2    0.000   0.368  raus: Abstandsregel (< 0.443)
+  Unbenannt-3.pdf             0.428  0.361   0/2    0.000   0.235  raus: Abstandsregel (< 0.443)
+  Scan2019-03-22_112.pdf      0.421  0.336   0/2    0.000   0.218  raus: Abstandsregel (< 0.443)
+  IMG_4471.pdf                0.410  0.300   0/2    0.000   0.195  raus: Abstandsregel (< 0.443)
+  20220906_0001.pdf           0.370  0.167   0/2    0.000   0.108  raus: Semantik-Sperre (0.370 < 0.4)
+  0027_2607_001.pdf           0.370  0.167   0/2    0.000   0.108  raus: Semantik-Sperre (0.370 < 0.4)
+  Scan_20231114_0003.pdf      0.362  0.140   0/2    0.000   0.091  raus: Semantik-Sperre (0.362 < 0.4)
+  CCF_000141.pdf              0.337  0.057   0/2    0.000   0.037  raus: Semantik-Sperre (0.337 < 0.4)
+  0044_1802_002.pdf           0.336  0.053   0/2    0.000   0.035  raus: Semantik-Sperre (0.336 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Unterlagen rund ums Fahrzeug'
+  Suchwoerter: ['unterlagen', 'fahrzeug']
+  ergibt 2 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Neues_Dokument_7.pdf        0.644  1.000   1/2    0.500   0.825  ANGEZEIGT
+  dok_2024_02_18.pdf          0.563  0.811   1/2    0.500   0.702  ANGEZEIGT
+  Unbenannt-3.pdf             0.566  0.821   0/2    0.000   0.534  raus: Abstandsregel (< 0.536)
+  IMG_4471.pdf                0.539  0.730   0/2    0.000   0.475  raus: Abstandsregel (< 0.536)
+  0027_2607_001.pdf           0.521  0.670   0/2    0.000   0.435  raus: Abstandsregel (< 0.536)
+  Scan_20231114_0003.pdf      0.459  0.463   0/2    0.000   0.301  raus: Abstandsregel (< 0.536)
+  CCF_000141.pdf              0.457  0.457   0/2    0.000   0.297  raus: Abstandsregel (< 0.536)
+  0044_1802_002.pdf           0.451  0.438   0/2    0.000   0.285  raus: Abstandsregel (< 0.536)
+  Scan2019-03-22_112.pdf      0.447  0.424   0/2    0.000   0.276  raus: Abstandsregel (< 0.536)
+  20220906_0001.pdf           0.420  0.334   0/2    0.000   0.217  raus: Abstandsregel (< 0.536)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Was zahle ich jeden Monat?'
+  Suchwoerter: ['zahle', 'monat']
+  ergibt 3 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Scan_20231114_0003.pdf      0.544  0.748   2/2    1.000   0.836  ANGEZEIGT
+  20220906_0001.pdf           0.547  0.758   1/2    0.500   0.668  ANGEZEIGT
+  Scan2019-03-22_112.pdf      0.514  0.646   1/2    0.500   0.595  ANGEZEIGT
+  Unbenannt-3.pdf             0.440  0.399   1/2    0.500   0.435  raus: Abstandsregel (< 0.544)
+  IMG_4471.pdf                0.472  0.507   0/2    0.000   0.330  raus: Abstandsregel (< 0.544)
+  0044_1802_002.pdf           0.469  0.496   0/2    0.000   0.322  raus: Abstandsregel (< 0.544)
+  0027_2607_001.pdf           0.464  0.479   0/2    0.000   0.311  raus: Abstandsregel (< 0.544)
+  Neues_Dokument_7.pdf        0.448  0.427   0/2    0.000   0.278  raus: Abstandsregel (< 0.544)
+  dok_2024_02_18.pdf          0.428  0.359   0/2    0.000   0.233  raus: Abstandsregel (< 0.544)
+  CCF_000141.pdf              0.378  0.195   0/2    0.000   0.126  raus: Semantik-Sperre (0.378 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Drucker'
+  Suchwoerter: ['drucker']
+  ergibt 2 Treffer
+  Soll       : FALSCH - 0027_2607_001.pdf nur auf Platz 2, davor Neues_Dokument_7.pdf
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Neues_Dokument_7.pdf        0.424  0.346   0/1    0.000   0.225  ANGEZEIGT
+  0027_2607_001.pdf           0.417  0.322   0/1    0.000   0.209  ANGEZEIGT
+  IMG_4471.pdf                0.381  0.204   0/1    0.000   0.132  raus: Semantik-Sperre (0.381 < 0.4)
+  dok_2024_02_18.pdf          0.367  0.157   0/1    0.000   0.102  raus: Semantik-Sperre (0.367 < 0.4)
+  Scan2019-03-22_112.pdf      0.360  0.133   0/1    0.000   0.087  raus: Semantik-Sperre (0.360 < 0.4)
+  Scan_20231114_0003.pdf      0.355  0.118   0/1    0.000   0.077  raus: Semantik-Sperre (0.355 < 0.4)
+  CCF_000141.pdf              0.350  0.100   0/1    0.000   0.065  raus: Semantik-Sperre (0.350 < 0.4)
+  20220906_0001.pdf           0.342  0.073   0/1    0.000   0.047  raus: Semantik-Sperre (0.342 < 0.4)
+  Unbenannt-3.pdf             0.322  0.005   0/1    0.000   0.003  raus: Semantik-Sperre (0.322 < 0.4)
+  0044_1802_002.pdf           0.306  0.000   0/1    0.000   0.000  raus: Semantik-Sperre (0.306 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Heizung gewartet'
+  Suchwoerter: ['heizung', 'gewartet']
+  ergibt 1 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  IMG_4471.pdf                0.558  0.794   1/2    0.500   0.691  ANGEZEIGT
+  Unbenannt-3.pdf             0.470  0.501   0/2    0.000   0.326  raus: Abstandsregel (< 0.449)
+  20220906_0001.pdf           0.463  0.475   0/2    0.000   0.309  raus: Abstandsregel (< 0.449)
+  0027_2607_001.pdf           0.449  0.430   0/2    0.000   0.279  raus: Abstandsregel (< 0.449)
+  Scan2019-03-22_112.pdf      0.446  0.421   0/2    0.000   0.274  raus: Abstandsregel (< 0.449)
+  Scan_20231114_0003.pdf      0.439  0.397   0/2    0.000   0.258  raus: Abstandsregel (< 0.449)
+  0044_1802_002.pdf           0.406  0.287   0/2    0.000   0.187  raus: Abstandsregel (< 0.449)
+  Neues_Dokument_7.pdf        0.397  0.256   0/2    0.000   0.167  raus: Semantik-Sperre (0.397 < 0.4)
+  CCF_000141.pdf              0.369  0.162   0/2    0.000   0.105  raus: Semantik-Sperre (0.369 < 0.4)
+  dok_2024_02_18.pdf          0.353  0.109   0/2    0.000   0.071  raus: Semantik-Sperre (0.353 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Spende für die Steuererklärung'
+  Suchwoerter: ['spende', 'steuererklärung']
+  ergibt 1 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  CCF_000141.pdf              0.550  0.768   0/2    0.000   0.499  ANGEZEIGT
+  0027_2607_001.pdf           0.433  0.378   0/2    0.000   0.246  raus: Abstandsregel (< 0.324)
+  Neues_Dokument_7.pdf        0.412  0.306   0/2    0.000   0.199  raus: Abstandsregel (< 0.324)
+  0044_1802_002.pdf           0.386  0.222   0/2    0.000   0.144  raus: Semantik-Sperre (0.386 < 0.4)
+  20220906_0001.pdf           0.386  0.221   0/2    0.000   0.144  raus: Semantik-Sperre (0.386 < 0.4)
+  Scan2019-03-22_112.pdf      0.376  0.187   0/2    0.000   0.121  raus: Semantik-Sperre (0.376 < 0.4)
+  IMG_4471.pdf                0.367  0.157   0/2    0.000   0.102  raus: Semantik-Sperre (0.367 < 0.4)
+  Scan_20231114_0003.pdf      0.367  0.155   0/2    0.000   0.101  raus: Semantik-Sperre (0.367 < 0.4)
+  dok_2024_02_18.pdf          0.352  0.108   0/2    0.000   0.070  raus: Semantik-Sperre (0.352 < 0.4)
+  Unbenannt-3.pdf             0.338  0.061   0/2    0.000   0.040  raus: Semantik-Sperre (0.338 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Waschmaschine'
+  Suchwoerter: ['waschmaschine']
+  ergibt 1 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  Unbenannt-3.pdf             0.564  0.813   0/1    0.000   0.528  ANGEZEIGT
+  0027_2607_001.pdf           0.462  0.473   0/1    0.000   0.308  raus: Abstandsregel (< 0.343)
+  IMG_4471.pdf                0.457  0.457   0/1    0.000   0.297  raus: Abstandsregel (< 0.343)
+  Neues_Dokument_7.pdf        0.447  0.424   0/1    0.000   0.276  raus: Abstandsregel (< 0.343)
+  20220906_0001.pdf           0.429  0.364   0/1    0.000   0.237  raus: Abstandsregel (< 0.343)
+  dok_2024_02_18.pdf          0.409  0.296   0/1    0.000   0.192  raus: Abstandsregel (< 0.343)
+  0044_1802_002.pdf           0.389  0.231   0/1    0.000   0.150  raus: Semantik-Sperre (0.389 < 0.4)
+  Scan2019-03-22_112.pdf      0.387  0.225   0/1    0.000   0.146  raus: Semantik-Sperre (0.387 < 0.4)
+  Scan_20231114_0003.pdf      0.353  0.111   0/1    0.000   0.072  raus: Semantik-Sperre (0.353 < 0.4)
+  CCF_000141.pdf              0.327  0.022   0/1    0.000   0.014  raus: Semantik-Sperre (0.327 < 0.4)
+
+------------------------------------------------------------------------------
+ANFRAGE: 'Strom'
+  Suchwoerter: ['strom']
+  ergibt 1 Treffer
+  Soll       : RICHTIG
+  Datei                         roh   semN   wört  stichN  gesamt  Status
+  20220906_0001.pdf           0.519  0.662   1/1    1.000   0.780  ANGEZEIGT
+  IMG_4471.pdf                0.410  0.300   0/1    0.000   0.195  raus: Abstandsregel (< 0.507)
+  Scan2019-03-22_112.pdf      0.410  0.299   0/1    0.000   0.195  raus: Abstandsregel (< 0.507)
+  dok_2024_02_18.pdf          0.408  0.292   0/1    0.000   0.190  raus: Abstandsregel (< 0.507)
+  0027_2607_001.pdf           0.393  0.245   0/1    0.000   0.159  raus: Semantik-Sperre (0.393 < 0.4)
+  Neues_Dokument_7.pdf        0.377  0.190   0/1    0.000   0.123  raus: Semantik-Sperre (0.377 < 0.4)
+  Scan_20231114_0003.pdf      0.354  0.113   0/1    0.000   0.073  raus: Semantik-Sperre (0.354 < 0.4)
+  Unbenannt-3.pdf             0.347  0.090   0/1    0.000   0.058  raus: Semantik-Sperre (0.347 < 0.4)
+  0044_1802_002.pdf           0.339  0.064   0/1    0.000   0.042  raus: Semantik-Sperre (0.339 < 0.4)
+  CCF_000141.pdf              0.337  0.058   0/1    0.000   0.038  raus: Semantik-Sperre (0.337 < 0.4)
+
+==============================================================================
+ERGEBNIS: 11 von 12 Anfragen richtig
+==============================================================================
+  FALSCH  'Drucker': 0027_2607_001.pdf nur auf Platz 2, davor Neues_Dokument_7.pdf
+
+Diese Zahl ist der Massstab. Vor jeder Aenderung an Modell,
+Schwellenwerten oder Chunking einmal notieren, danach vergleichen.

@@ -29,8 +29,7 @@ def selbsttest():
     Nutzer laeuft.
     """
     pflicht = [
-        "torch", "torchgen", "sentence_transformers", "transformers",
-        "numpy", "customtkinter",
+        "onnxruntime", "tokenizers", "numpy", "customtkinter",
     ]
     optional = {
         "pdfplumber": "PDF (Haupterkennung)",
@@ -65,14 +64,15 @@ def selbsttest():
             print(f"  FEHLT   {name:26s} {zweck}  ({e})")
             fehler += 1
 
-    # Der eigentliche Stolperstein lag nicht im Import von torch, sondern
-    # im Aufbau eines Modells. Deshalb hier zusaetzlich der Weg, den auch
-    # die Anwendung geht - ohne Netzzugriff, es geht nur um die Module.
-    print("\nModellklasse:")
+    # Nicht nur die Module - das mitgelieferte Modell wird wirklich geladen
+    # und rechnet einen Probesatz. Genau so, wie es spaeter beim Nutzer
+    # laeuft. (Frueher scheiterte eine Fassung erst auf einem fremden Mac
+    # beim Laden des Modells, obwohl alle Module da waren.)
+    print("\nSuchmodell:")
     try:
-        from sentence_transformers import SentenceTransformer  # noqa: F401
-        from transformers import AutoTokenizer  # noqa: F401
-        print("  ok      Modell- und Tokenizer-Klassen ladbar")
+        from smartsearch.kern import modell
+        vektor = modell.lade_modell().encode(["Probesatz fuer den Selbsttest"])
+        print(f"  ok      {modell.MODELL_NAME} ({modell.MODELL_DATEI}), {vektor.shape[1]} Werte je Text")
     except Exception as e:
         print(f"  FEHLT   {e}")
         fehler += 1

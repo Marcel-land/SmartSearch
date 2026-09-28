@@ -1,5 +1,9 @@
 # Umgebung und Bauergebnisse
 venv/
+venv-*/
+
+# Suchmodell (rund 100 MB) - kommt ueber werkzeuge/modell_holen.py
+ressourcen/modell/
 dist/
 build/
 __pycache__/

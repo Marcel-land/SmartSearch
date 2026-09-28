@@ -23,9 +23,8 @@ unten scrollen. Dort steht „SmartSearch wurde blockiert". Daneben auf
 Das ist normal: Für Apples Beglaubigung braucht es ein kostenpflichtiges
 Entwicklerkonto, und das Programm ist kostenlos.
 
-**4.** Beim ersten Start lädt es einmalig ein Suchmodell herunter, etwa
-2,3 GB. Das dauert je nach Leitung ein paar Minuten. Danach braucht das
-Programm nie wieder Internet.
+**4.** Das Suchmodell ist im Programm enthalten – es wird nichts
+heruntergeladen, und für die Suche braucht es kein Internet.
 
 **5.** Ordner auswählen — Dokumente und Schreibtisch reichen für den
 Test. Dann läuft das Einlesen. Auch das dauert ein paar Minuten.

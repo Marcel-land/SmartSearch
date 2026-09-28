@@ -31,10 +31,17 @@ pyobjc-framework-Cocoa ; sys_platform == "darwin"
 pyobjc-framework-Vision ; sys_platform == "darwin"
 
 # --- Suche / KI ---
-sentence-transformers
-torch
+# onnxruntime genau in dieser Fassung: 1.23.2 ist die letzte mit Paketen fuer
+# Macs mit Intel-Prozessor (und nur bis Python 3.13). Alle drei Systeme
+# fahren damit denselben Stand. Mindestens macOS 13 (Ventura).
+# PyTorch und sentence-transformers werden NICHT mehr gebraucht (siehe
+# kern/modell.py) - das spart rund 2 GB.
+onnxruntime==1.23.2
+tokenizers
 numpy
 langchain-text-splitters                    # Aufteilung in Textabschnitte
+# Das Modell selbst kommt nicht ueber pip, sondern mit
+#     venv/bin/python -m werkzeuge.modell_holen
 
 # --- Dateien lesen ---
 pypdf

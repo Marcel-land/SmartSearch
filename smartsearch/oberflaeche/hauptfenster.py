@@ -84,13 +84,6 @@ def dauer_text(sekunden):
     return f"{stunden} Std {rest_minuten} Min"
 
 
-def gb_text(bytes_zahl):
-    """Bytes als "1,4 GB" - mit Komma, weil die Anzeige im deutschen
-    Teil der Oberflaeche sonst fremd wirkt."""
-    gb = bytes_zahl / 1_000_000_000
-    return f"{gb:.1f}".replace(".", ",") + " GB"
-
-
 class Hauptfenster(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -653,10 +646,6 @@ class Hauptfenster(ctk.CTk):
         man einmal zehn Sekunden und laenger auf ein Ergebnis, das danach
         in Bruchteilen einer Sekunde da ist. Genau dieser erste Eindruck
         ist es, den man als "die App sucht ewig" in Erinnerung behaelt.
-
-        Bewusst nur, wenn das Modell schon auf der Platte liegt: sonst
-        wuerde der Programmstart ungefragt einen zwei Gigabyte grossen
-        Download anstossen.
 
         Fehler werden hier absichtlich nur protokolliert. Geht etwas
         schief, faellt es bei der echten Suche ohnehin wieder auf - dort
@@ -1320,14 +1309,7 @@ class Hauptfenster(ctk.CTk):
         in den Hauptthread - Tk darf nur von dort angefasst werden."""
         def melden(ereignis):
             art = ereignis["art"]
-            if art == "modell_download_start":
-                anteil, text = 0, t("model.download_start")
-            elif art == "modell_download":
-                anteil = ereignis["anteil"]
-                text = t("model.download_progress",
-                         geladen=gb_text(ereignis["geladen"]),
-                         gesamt=gb_text(ereignis["gesamt"]))
-            elif art == "datei":
+            if art == "datei":
                 anteil = ereignis["anteil"]
                 text = t("index.progress_indexing", n=ereignis["n"], gesamt=ereignis["gesamt"],
                          name=ereignis["name"][:25], zeit=dauer_text(ereignis["restzeit_sek"]))
@@ -1350,16 +1332,9 @@ class Hauptfenster(ctk.CTk):
             )
             self.after(0, self._index_fertig if vollstaendig else self._index_abgebrochen)
         except modell.ProgrammUnvollstaendig as e:
-            # Muss VOR ModellDownloadFehler stehen: ein fehlender
-            # Programmteil sieht an dieser Stelle aus wie ein
-            # Download-Problem, ist aber keines - der Nutzer soll nicht
-            # vergeblich seine Verbindung prüfen.
+            # Modelldateien oder eine Bibliothek fehlen in der App - dafuer
+            # gibt es einen eigenen Dialog statt einer rohen Fehlermeldung.
             self.after(0, lambda e=e: self._index_dialog_fehler(meldungen.programm_unvollstaendig, e))
-        except modell.ModellDownloadFehler as e:
-            # Getrennt behandelt: das ist kein Indexierungsfehler, sondern
-            # fast immer "beim ersten Start kein Internet". Ein roher
-            # Netzwerk-Stacktrace hilft an dieser Stelle niemandem.
-            self.after(0, lambda e=e: self._index_dialog_fehler(meldungen.modell_download_fehlgeschlagen, e))
         except Exception as e:
             self.after(0, lambda e=e: self._index_fehlgeschlagen(e))
         finally:
@@ -1367,7 +1342,7 @@ class Hauptfenster(ctk.CTk):
             self.indexierung_lock.release()
 
     def _index_dialog_fehler(self, dialog, fehler):
-        """Beide Modell-Fehler zeigen einen eigenen Dialog (dialoge/meldungen.py).
+        """Modell-Fehler zeigen einen eigenen Dialog (dialoge/meldungen.py).
         Vorher Knoepfe freigeben und Fortschritt ausblenden."""
         self._buttons_entsperren()
         self.verstecke_fortschritt()

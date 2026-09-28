@@ -1,199 +1,167 @@
 #!/usr/bin/env python3
 """
-modell.py - das KI-Suchmodell: herunterladen, laden, im Speicher halten.
+modell.py - das KI-Suchmodell: laden und im Speicher halten.
 
-Hierher gehoert alles, was mit dem Modell selbst zu tun hat - und nur das.
-Wird das Modell spaeter gewechselt (geplant: granite-embedding ueber
-onnxruntime statt BGE-M3 ueber PyTorch), aendert sich diese eine Datei;
-Suche, Index und Oberflaeche rufen weiterhin geladenes_modell() auf.
+SEIT HERBST 2026: granite-embedding ueber onnxruntime statt BGE-M3 ueber
+PyTorch.
+
+Warum der Wechsel
+-----------------
+1. PyTorch gibt es fuer Macs mit Intel-Prozessor nicht mehr in einer
+   aktuellen Fassung (letzte: 2.2.2, ohne Python 3.13). onnxruntime laeuft
+   auf Mac (Apple-Chip und Intel) und Windows mit derselben Fassung.
+2. Groesse: BGE-M3 wog 2,27 GB und wurde beim ersten Start aus dem Netz
+   geladen. granite-embedding-97m-multilingual-r2 wiegt als int8-ONNX rund
+   100 MB und wird MIT DER APP AUSGELIEFERT. Es gibt keinen Download mehr,
+   keine Verbindung zu huggingface.co, auch nicht beim ersten Start. Fuer
+   Kanzleien ("nichts verlaesst den Rechner") ist das ein Argument, fuer
+   Rechner ohne Internet die Voraussetzung.
+3. Lizenz: Apache-2.0, kommerziell ohne Auflagen nutzbar.
+
+Wie die anderen Teile es benutzen
+---------------------------------
+Unveraendert: geladenes_modell().encode(texte, normalize_embeddings=True)
+liefert eine Zahlenmatrix, eine Zeile je Text. Suche und Indexierung
+merken vom Wechsel nichts. Der Index merkt es an MODELL_NAME (siehe
+kern/index.py) und wird beim ersten Start einmal neu aufgebaut.
+
+Woher die Modelldateien kommen
+------------------------------
+Sie liegen in ressourcen/modell/<Ordner>/ und gehoeren NICHT ins
+Git-Repository (100 MB). Geholt werden sie einmalig mit
+
+    venv/bin/python -m werkzeuge.modell_holen
+
+bauen/mac/build.sh packt sie in die App.
 """
 
 import os
-import socket
 import threading
 
-MODELL_NAME = "BAAI/bge-m3"
+from smartsearch.kern.pfade import ressource
 
+MODELL_NAME = "ibm-granite/granite-embedding-97m-multilingual-r2"
 
-# Ungefaehre Groesse des BGE-M3-Modells auf der Festplatte. Dient NUR
-# der Fortschrittsanzeige beim einmaligen Download - ein paar Prozent
-# Abweichung sind egal, Hauptsache der Nutzer sieht, dass sich etwas tut.
-MODELL_GROESSE_BYTES = 2_270_000_000
+# Ordner unter ressourcen/ und die Dateien darin.
+MODELL_ORDNER = "modell/granite-embedding-97m-multilingual-r2"
 
+# Welche ONNX-Datei benutzt wird. IBM liefert zwei:
+#   onnx/model.onnx              ~390 MB, volle Genauigkeit (float32)
+#   onnx/model_quint8_avx2.onnx   ~98 MB, auf 8 Bit verkleinert
+# Welche ausgeliefert wird, entscheidet die Messung mit
+# werkzeuge/modellvergleich.py - nicht das Bauchgefuehl. Umstellen nur hier.
+MODELL_DATEI = "onnx/model_quint8_avx2.onnx"
 
-class ModellDownloadFehler(Exception):
-    """Das Modell liegt noch nicht lokal vor und konnte nicht geladen
-    werden - in aller Regel, weil beim allerersten Start keine
-    Internetverbindung besteht. Eigene Klasse, damit die GUI diesen einen
-    Fall verstaendlich erklaeren kann, statt einen rohen Netzwerkfehler
-    anzuzeigen."""
+# Nur fuer Messungen (werkzeuge/such_diagnose.py): eine andere Datei
+# ausprobieren, ohne den Code zu aendern. Die ausgelieferte App setzt das nie.
+MODELL_DATEI = os.environ.get("SMARTSEARCH_MODELLDATEI") or MODELL_DATEI
+TOKENIZER_DATEI = "tokenizer.json"
+
+# Laenger ist ein Textabschnitt nie (ABSCHNITT_GROESSE in dateien.py sind
+# 350 Zeichen, also rund 100 Token). Die Grenze schuetzt nur davor, dass
+# eine lange Suchanfrage den Speicher sprengt.
+MAX_TOKEN = 512
+
+# Wie viele Texte das Modell auf einmal rechnet.
+STAPEL = 16
 
 
 class ProgrammUnvollstaendig(Exception):
-    """Ein Baustein fehlt in der ausgelieferten App - nicht das Modell,
-    sondern ein Programmteil, der beim Bauen haette mitkopiert werden
-    muessen. Der Nutzer kann daran nichts aendern; ein Neuversuch oder
-    eine bessere Internetverbindung helfen nicht. Eigene Klasse, damit
-    die Oberflaeche das sagt, statt faelschlich auf die Verbindung zu
-    zeigen."""
+    """Ein Baustein fehlt in der ausgelieferten App - z. B. die
+    Modelldateien. Der Nutzer kann daran nichts aendern; ein Neuversuch
+    hilft nicht. Eigene Klasse, damit die Oberflaeche genau das sagt."""
 
 
-def _modell_cache_ordner():
-    """Ordner, in dem huggingface das Modell ablegt. HF_HOME hat Vorrang,
-    falls jemand den Cache verschoben hat."""
-    basis = os.environ.get("HF_HOME")
-    if basis:
-        hub = os.path.join(basis, "hub")
-    else:
-        hub = os.path.expanduser("~/.cache/huggingface/hub")
-    return os.path.join(hub, "models--" + MODELL_NAME.replace("/", "--"))
-
-
-def _ordnergroesse(pfad):
-    gesamt = 0
-    for wurzel, _, dateien in os.walk(pfad):
-        for name in dateien:
-            try:
-                # Symlinks nicht mitzaehlen: huggingface verlinkt die
-                # Snapshot-Dateien auf den blobs-Ordner, sonst waere jede
-                # Datei doppelt in der Summe.
-                voll = os.path.join(wurzel, name)
-                if not os.path.islink(voll):
-                    gesamt += os.path.getsize(voll)
-            except OSError:
-                pass
-    return gesamt
+def modell_pfad(datei=""):
+    return ressource(os.path.join(MODELL_ORDNER, datei)) if datei else ressource(MODELL_ORDNER)
 
 
 def modell_ist_vorhanden():
-    """True, wenn das Modell vollstaendig genug lokal liegt, um ohne
-    Internet zu starten. Die Groessenschwelle faengt einen frueher
-    abgebrochenen Download ab - ein halb geladener Ordner existiert zwar,
-    taugt aber nicht."""
-    ordner = _modell_cache_ordner()
-    if not os.path.isdir(ordner):
-        return False
-    return _ordnergroesse(ordner) > MODELL_GROESSE_BYTES * 0.9
+    """True, wenn die Modelldateien da sind. Da das Modell mitgeliefert
+    wird, ist das in einer fertigen App immer der Fall - False heisst:
+    beim Bauen fehlte es, oder beim Entwickeln wurde modell_holen noch
+    nicht ausgefuehrt."""
+    return (os.path.isfile(modell_pfad(MODELL_DATEI))
+            and os.path.isfile(modell_pfad(TOKENIZER_DATEI)))
 
 
-# ---------------------------------------------------------------------------
-# OFFLINE-BETRIEB ERZWINGEN, SOBALD DAS MODELL LOKAL LIEGT
-#
-# Gemessen am 18.09.2026 auf einem zweiten Mac: Die fertige App hat beim
-# Start
-#     HEAD https://huggingface.co/BAAI/bge-m3/resolve/main/adapter_config.json
-# aufgerufen, fuenfmal wiederholt und dann das Vorladen abgebrochen. Das
-# passiert bei JEDEM Start, auch wenn das Modell vollstaendig auf der
-# Platte liegt: huggingface_hub fragt von sich aus nach, ob es eine
-# neuere Fassung gibt.
-#
-# Fuer dieses Produkt ist das kein Schoenheitsfehler:
-#   1. Wir verkaufen "nichts verlaesst Ihren Rechner". Eine Verbindung zu
-#      einem Server in den USA bei jedem Start widerspricht dem, und in
-#      der Datenschutzerklaerung steht sie nicht.
-#   2. Auf einem Rechner ohne Internet - oder wenn das Netz bei der
-#      Anmeldung noch nicht steht - kostet es Wartezeit und bricht das
-#      Vorladen ab, obwohl alles Noetige da ist.
-#
-# Die beiden Schalter unten werden gesetzt, SOBALD das Modell vollstaendig
-# vorliegt, und zwar beim Import - huggingface_hub liest sie einmalig beim
-# eigenen Import ein, spaeter gesetzt wirken sie nicht mehr. Fehlt das
-# Modell noch, bleiben sie aus, sonst koennte es nie heruntergeladen
-# werden.
-# ---------------------------------------------------------------------------
+class OnnxModell:
+    """Rechnet Texte in Bedeutungsvektoren um - ohne PyTorch.
 
-def _offline_erzwingen_wenn_moeglich():
-    if modell_ist_vorhanden():
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
-        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-        return True
-    return False
+    Ablauf je Stapel: Tokenizer -> Zahlenfolgen (input_ids, attention_mask)
+    -> ONNX-Modell -> Vektor des ersten Tokens ([CLS]) je Text -> auf
+    Laenge 1 normiert. So beschreibt IBM die Nutzung des Modells
+    ("CLS pooling", L2-Normierung).
+    """
 
+    def __init__(self, modell_datei, tokenizer_datei, threads=None):
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
 
-_OFFLINE_AKTIV = _offline_erzwingen_wenn_moeglich()
+        self.tokenizer = Tokenizer.from_file(tokenizer_datei)
+        self.tokenizer.enable_truncation(max_length=MAX_TOKEN)
+        self.tokenizer.enable_padding()
 
+        optionen = ort.SessionOptions()
+        if threads:
+            optionen.intra_op_num_threads = threads
+        self.sitzung = ort.InferenceSession(
+            modell_datei, sess_options=optionen, providers=["CPUExecutionProvider"])
+        self._eingaenge = {e.name for e in self.sitzung.get_inputs()}
 
-def _internet_erreichbar(timeout=5):
-    try:
-        with socket.create_connection(("huggingface.co", 443), timeout=timeout):
-            return True
-    except OSError:
-        return False
+    def _stapel_rechnen(self, texte):
+        import numpy as np
+
+        kodiert = self.tokenizer.encode_batch(list(texte))
+        ids = np.asarray([k.ids for k in kodiert], dtype="int64")
+        maske = np.asarray([k.attention_mask for k in kodiert], dtype="int64")
+
+        eingabe = {"input_ids": ids, "attention_mask": maske}
+        # Manche Exporte verlangen zusaetzlich token_type_ids, andere
+        # lehnen sie ab - deshalb nur mitgeben, wenn das Modell sie kennt.
+        if "token_type_ids" in self._eingaenge:
+            eingabe["token_type_ids"] = np.zeros_like(ids)
+        eingabe = {k: v for k, v in eingabe.items() if k in self._eingaenge}
+
+        ausgabe = self.sitzung.run(None, eingabe)[0]
+        if ausgabe.ndim == 3:
+            # (Texte, Token, Merkmale) -> Vektor des ersten Tokens
+            ausgabe = ausgabe[:, 0, :]
+        return ausgabe.astype("float32")
+
+    def encode(self, texte, show_progress_bar=False, normalize_embeddings=True, **_):
+        """Wie SentenceTransformer.encode: Liste von Texten -> Matrix."""
+        import numpy as np
+
+        if isinstance(texte, str):
+            texte = [texte]
+        teile = [self._stapel_rechnen(texte[i:i + STAPEL])
+                 for i in range(0, len(texte), STAPEL)]
+        if not teile:
+            return np.zeros((0, 0), dtype="float32")
+        vektoren = np.vstack(teile)
+        if normalize_embeddings:
+            laenge = np.linalg.norm(vektoren, axis=1, keepdims=True)
+            vektoren = vektoren / np.maximum(laenge, 1e-12)
+        return vektoren
 
 
 def lade_modell(fortschritt_fn=None):
-    """Laedt das BGE-M3 KI-Modell.
+    """Laedt das mitgelieferte Modell. Wirft ProgrammUnvollstaendig, wenn
+    Dateien oder Bibliotheken fehlen.
 
-    WICHTIG: Laeuft bewusst auf der CPU statt auf MPS (Apples GPU-Backend).
-    PyTorchs MPS-Speicherverwalter hat einen bekannten Bug, der bei
-    laengeren Indexierungslaeufen mit "buffer_block INTERNAL ASSERT FAILED"
-    abstuerzt (die ganze App wird dann vom Betriebssystem beendet - "zsh:
-    abort"). Auf der CPU ist die Berechnung etwas langsamer, aber stabil.
-
-    fortschritt_fn(geladene_bytes, gesamt_bytes) wird waehrend des
-    EINMALIGEN Erst-Downloads regelmaessig aufgerufen. Ohne diese Rueckmeldung
-    steht ein neuer Nutzer minutenlang vor einer scheinbar eingefrorenen
-    App - das war die haeufigste Stelle, an der Leute die App wieder
-    geloescht haben, bevor sie sie ueberhaupt einmal benutzt hatten.
-
-    Wirft ModellDownloadFehler, wenn das Modell fehlt und nicht geladen
-    werden kann.
+    fortschritt_fn wird nicht mehr gebraucht (es gibt keinen Download) und
+    steht nur noch in der Signatur, damit bestehende Aufrufe weiter passen.
     """
-    muss_geladen_werden = not modell_ist_vorhanden()
-
-    if muss_geladen_werden and not _internet_erreichbar():
-        raise ModellDownloadFehler(
-            "Das KI-Modell wurde noch nicht heruntergeladen und es besteht "
-            "keine Internetverbindung."
-        )
-
-    beobachter_stoppen = threading.Event()
-
-    def _beobachte_download():
-        """Misst waehrend des Downloads einfach die Groesse des Cache-
-        Ordners. Bewusst so simpel gehalten statt ueber die internen
-        Fortschritts-Hooks von huggingface_hub zu gehen - die aendern sich
-        zwischen Versionen, ein Ordner auf der Festplatte nicht."""
-        ordner = _modell_cache_ordner()
-        while not beobachter_stoppen.wait(1.0):
-            try:
-                geladen = _ordnergroesse(ordner) if os.path.isdir(ordner) else 0
-                fortschritt_fn(geladen, MODELL_GROESSE_BYTES)
-            except Exception:
-                pass
-
-    beobachter = None
-    if muss_geladen_werden and fortschritt_fn is not None:
-        beobachter = threading.Thread(target=_beobachte_download, daemon=True)
-        beobachter.start()
-
+    if not modell_ist_vorhanden():
+        raise ProgrammUnvollstaendig(
+            f"Suchmodell fehlt unter {modell_pfad()}. Beim Entwickeln: "
+            f"venv/bin/python -m werkzeuge.modell_holen")
     try:
-        if not muss_geladen_werden:
-            # Zweite Absicherung, falls der Import oben noch vor dem
-            # Download gelaufen ist und das Modell erst danach kam.
-            os.environ.setdefault("HF_HUB_OFFLINE", "1")
-            os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-        quelle = "lokal" if not muss_geladen_werden else "wird geladen"
-        print(f"Lade KI-Modell (BGE-M3, CPU-Modus, {quelle})...")
-        from sentence_transformers import SentenceTransformer
-        return SentenceTransformer(MODELL_NAME, device="cpu")
+        print(f"Lade Suchmodell ({MODELL_NAME}, {MODELL_DATEI})...")
+        return OnnxModell(modell_pfad(MODELL_DATEI), modell_pfad(TOKENIZER_DATEI))
     except ImportError as e:
-        # Ein fehlendes Modul ist kein Netzwerkproblem. Frueher landete
-        # dieser Fall in der Sammelbehandlung unten und wurde dem Nutzer
-        # als "keine Internetverbindung" angezeigt - eine Fehlermeldung,
-        # die in die falsche Richtung schickt und nicht loesbar ist.
         raise ProgrammUnvollstaendig(str(e)) from e
-    except Exception as e:
-        if muss_geladen_werden:
-            # Beim Erst-Download ist ein Fehler fast immer ein Netzwerk-
-            # oder Speicherplatzproblem - als solches weiterreichen, damit
-            # die GUI es erklaeren kann.
-            raise ModellDownloadFehler(str(e)) from e
-        raise
-    finally:
-        beobachter_stoppen.set()
-        if beobachter is not None:
-            beobachter.join(timeout=2)
 
 
 _modell_cache = None
@@ -205,14 +173,11 @@ def geladenes_modell(fortschritt_fn=None):
 
     Ohne den Lock könnten Suche und Indexierung, wenn sie gleichzeitig zum
     allerersten Mal starten, beide parallel lade_modell() aufrufen und das
-    Modell doppelt laden (unnötiger Speicher-/Zeitverbrauch, im schlimmsten
-    Fall doppelte Downloads beim ersten Start).
+    Modell doppelt laden.
     """
     global _modell_cache
     if _modell_cache is None:
         with _modell_lock:
-            if _modell_cache is None:  # Doppelt geprüft: evtl. hat ein
-                # anderer Thread es inzwischen schon geladen, während wir
-                # auf den Lock gewartet haben.
+            if _modell_cache is None:
                 _modell_cache = lade_modell(fortschritt_fn=fortschritt_fn)
     return _modell_cache

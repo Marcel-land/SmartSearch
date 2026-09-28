@@ -26,14 +26,12 @@ So geben Sie das Programm frei:
 Diese Freigabe ist einmalig. Ab dem zweiten Start öffnet sich SmartSearch
 wie jedes andere Programm.
 
-## 3. Beim ersten Start: Suchmodell wird geladen
+## 3. Ohne Internet
 
-SmartSearch lädt einmalig ein Suchmodell von etwa 2,3 GB herunter. Je nach
-Verbindung dauert das einige Minuten; den Fortschritt sehen Sie im Fenster.
-
-Dieser Download ist der einzige Zeitpunkt, an dem SmartSearch eine
-Internetverbindung benötigt. Danach arbeitet das Programm vollständig ohne
-Verbindung. Ihre Dateien verlassen Ihren Mac zu keinem Zeitpunkt.
+Das Suchmodell ist bereits im Programm enthalten. SmartSearch lädt nichts
+nach und braucht für die Suche keine Internetverbindung – auch nicht beim
+ersten Start.
+Ihre Dateien verlassen Ihren Mac zu keinem Zeitpunkt.
 
 ## 4. Ordner auswählen
 
@@ -55,10 +53,9 @@ nichts. Bestätigen Sie die Abfrage mit **Erlauben**.
 
 ## Systemvoraussetzungen
 
-- macOS 12 (Monterey) oder neuer
+- macOS 13 (Ventura) oder neuer
 - Apple Silicon oder Intel
-- Etwa 3 GB freier Speicherplatz (Programm und Suchmodell)
-- Internetverbindung für den ersten Start
+- Etwa 500 MB freier Speicherplatz (Programm mit Suchmodell)
 
 ## Häufige Fragen
 

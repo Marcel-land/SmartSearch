@@ -47,7 +47,7 @@ if python3 -c "import Vision" 2>/dev/null; then
     echo "pyobjc-framework-Vision: bereits vorhanden"
 else
     echo "pyobjc-framework-Vision wird installiert..."
-    pip install --quiet pyobjc-framework-Vision 2>&1 | tail -5
+    python3 -m pip install --quiet pyobjc-framework-Vision 2>&1 | tail -5
     if python3 -c "import Vision" 2>/dev/null; then
         echo "  erfolgreich installiert"
     else
@@ -62,7 +62,7 @@ for paket in pypdfium2 pyinstaller; do
         echo "$paket: bereits vorhanden"
     else
         echo "$paket wird installiert..."
-        pip install --quiet "$paket" 2>&1 | tail -3
+        python3 -m pip install --quiet "$paket" 2>&1 | tail -3
     fi
 done
 echo
@@ -70,7 +70,7 @@ echo
 # Welche Version welcher Bausteine verwendet wird - hilft bei der
 # Fehlersuche, falls der Build spaeter woanders anders ausfaellt.
 echo "Verwendete Versionen:"
-pip list 2>/dev/null | grep -i -E "^(torch|sentence-transformers|customtkinter|pypdfium2|pyobjc-framework-Vision|pyinstaller|watchdog|pdfplumber) " || true
+python3 -m pip list 2>/dev/null | grep -i -E "^(onnxruntime|tokenizers|customtkinter|pypdfium2|pyobjc-framework-Vision|pyinstaller|watchdog|pdfplumber) " || true
 echo
 
 # ---------------------------------------------------------------------------

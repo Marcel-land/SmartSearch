@@ -56,3 +56,6 @@ SmartSearch Pro.spec
 # Lokale Hilfsskripte und Ausgaben
 commit_*.command
 such-diagnose.txt
+
+# Uebergabe-Ordner fuer Git-Buendel (Claude-Sitzungen)
+_uebergabe/

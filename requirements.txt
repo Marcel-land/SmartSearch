@@ -1,0 +1,61 @@
+# Pakete, die SmartSearch braucht - fuer Mac UND Windows in EINER Datei.
+#
+# Was nur auf einem System gebraucht wird, steht mit einer Bedingung dahinter
+# (z. B. ; sys_platform == "darwin"). pip wertet sie selbst aus und laesst
+# den Rest weg. Frueher gab es nur requirements-windows.txt, und was auf dem
+# Mac installiert sein muss, stand nirgends - nur im venv auf Marcels Mac.
+#
+# Einrichten, Mac:
+#     python3.13 -m venv venv
+#     venv/bin/python -m pip install -r requirements.txt
+#
+# Einrichten, Windows:
+#     py -3.13 -m venv venv
+#     venv\Scripts\python -m pip install -r requirements.txt
+#
+# PYTHON 3.13, NICHT DIE NEUESTE FASSUNG.
+# Keine Geschmackssache, sondern eine harte Grenze. Fuer Intel-Macs gibt es
+# onnxruntime nur bis Version 1.23.2, und die wiederum nur bis Python 3.13.
+# Damit alle drei Systeme - Mac mit Apple-Chip, Mac mit Intel, Windows -
+# denselben Stand fahren, gilt 3.13 ueberall (siehe docs/ARCHITEKTUR.md).
+# Der Mac-Arbeitsordner laeuft Stand 27.09.2026 noch mit 3.14; die
+# Umstellung steht auf der Aufgabenliste.
+
+# --- Oberflaeche ---
+customtkinter
+pystray ; sys_platform == "win32"          # Symbol im Infobereich (neben der Uhr)
+pillow                                      # Symbolbild fuer pystray, Bildaufbereitung fuer OCR
+
+# --- Mac-Anbindung (Menueleiste, Dock, Tastenkuerzel, Texterkennung, Systemsprache) ---
+pyobjc-framework-Cocoa ; sys_platform == "darwin"
+pyobjc-framework-Vision ; sys_platform == "darwin"
+
+# --- Suche / KI ---
+sentence-transformers
+torch
+numpy
+langchain-text-splitters                    # Aufteilung in Textabschnitte
+
+# --- Dateien lesen ---
+pypdf
+pdfplumber
+python-docx
+openpyxl
+python-pptx
+
+# --- Ordnerueberwachung ---
+watchdog
+
+# --- Texterkennung fuer gescannte PDFs ---
+# pypdfium2 rendert die Seiten - auf beiden Systemen.
+# Erkannt wird auf dem Mac ueber Apples Vision (siehe oben), unter Windows
+# ueber Tesseract. Das braucht ZUSAETZLICH das Programm selbst:
+#     https://github.com/UB-Mannheim/tesseract/wiki
+# Ohne Tesseract laeuft alles andere normal weiter, nur gescannte PDFs
+# ohne Textebene bleiben dann unlesbar. Geplant ist RapidOCR auf beiden
+# Systemen (siehe Aufgabenliste), dann faellt dieser Unterschied weg.
+pypdfium2
+pytesseract ; sys_platform == "win32"
+
+# --- Bauen ---
+pyinstaller

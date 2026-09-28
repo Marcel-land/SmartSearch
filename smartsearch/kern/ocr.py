@@ -34,6 +34,7 @@ Installation der beiden benoetigten Pakete:
 
 import io
 import os
+import threading
 
 # Wie viele Seiten eines gescannten PDFs maximal durch die Texterkennung
 # laufen. Schuetzt davor, dass ein einzelnes 400-Seiten-Scan-Dokument die
@@ -45,6 +46,16 @@ OCR_MAX_SEITEN = 30
 # kosten vor allem Zeit und Arbeitsspeicher, ohne die Erkennung noch
 # spuerbar zu verbessern (Tesseract brauchte dafuer frueher 400).
 OCR_DPI = 300
+
+# pdfium (die PDF-Engine in pypdfium2) ist NICHT threadsicher. Die
+# Indexierung liest aber mit mehreren Threads gleichzeitig (siehe
+# LESE_THREADS in indexierung.py). Zwei Scans gleichzeitig zu rendern hat
+# Python am 28.09.2026 auf dem Mac hart abstuerzen lassen (SIGABRT, ohne
+# jede Fehlermeldung) - aufgefallen erst mit dem Testset, das neun Scans
+# enthaelt; mit einem einzelnen Scan passiert es nie.
+# Deshalb laeuft JEDER Aufruf von pdfium durch diese Sperre. Die eigentliche
+# Texterkennung (Vision, Tesseract) laeuft ausserhalb und bleibt parallel.
+_PDFIUM_SPERRE = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -80,15 +91,51 @@ def _pruefe_tesseract():
         return False
 
 
+_engine_ergebnis = []
+_engine_sperre = threading.Lock()
+
+
 def verfuegbare_engine():
     """Gibt zurueck, womit OCR aktuell laeuft: "vision", "tesseract" oder
     None. Die GUI zeigt das im Hilfe-Tab an, damit fehlende Texterkennung
-    nie wieder unbemerkt bleibt."""
-    if _pruefe_pdfium() and _pruefe_vision():
-        return "vision"
-    if _pruefe_tesseract():
-        return "tesseract"
-    return None
+    nie wieder unbemerkt bleibt.
+
+    Wird nur einmal ermittelt: Die Pruefung importiert PyObjC/Vision bzw.
+    startet tesseract - das soll nicht bei jedem Scan neu passieren und
+    schon gar nicht in mehreren Lese-Threads gleichzeitig."""
+    with _engine_sperre:
+        if not _engine_ergebnis:
+            if _pruefe_pdfium() and _pruefe_vision():
+                _engine_ergebnis.append("vision")
+            elif _pruefe_tesseract():
+                _engine_ergebnis.append("tesseract")
+            else:
+                _engine_ergebnis.append(None)
+        return _engine_ergebnis[0]
+
+
+def _seiten_als_bilder(pfad):
+    """Rendert die Seiten eines PDFs nacheinander als Bilder - jeder
+    pdfium-Aufruf unter _PDFIUM_SPERRE. Als Generator, damit nie mehr als
+    eine Seite (bei 300 dpi rund 25 MB) im Speicher liegt."""
+    import pypdfium2 as pdfium
+
+    with _PDFIUM_SPERRE:
+        dokument = pdfium.PdfDocument(pfad)
+        seitenzahl = min(len(dokument), OCR_MAX_SEITEN)
+    try:
+        for i in range(seitenzahl):
+            with _PDFIUM_SPERRE:
+                seite = dokument[i]
+                bild = seite.render(scale=OCR_DPI / 72).to_pil().copy()
+                seite.close()
+            yield bild
+    finally:
+        with _PDFIUM_SPERRE:
+            try:
+                dokument.close()
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -136,42 +183,29 @@ def _vision_text_aus_png(png_bytes, sprachen=("de-DE", "en-US")):
 
 
 def _ocr_mit_vision(pfad):
-    import pypdfium2 as pdfium
-
     try:
         import objc
         pool = objc.autorelease_pool
     except Exception:
         pool = None
 
-    dokument = pdfium.PdfDocument(pfad)
-    try:
-        seitenzahl = min(len(dokument), OCR_MAX_SEITEN)
-        teile = []
-        for i in range(seitenzahl):
-            seite = dokument[i]
-            bitmap = seite.render(scale=OCR_DPI / 72)
-            bild = bitmap.to_pil()
-            puffer = io.BytesIO()
-            bild.save(puffer, format="PNG")
+    teile = []
+    for bild in _seiten_als_bilder(pfad):
+        puffer = io.BytesIO()
+        bild.save(puffer, format="PNG")
 
-            # Autorelease-Pool pro Seite: ohne ihn sammeln sich die von
-            # Vision erzeugten Objective-C-Objekte an, bis ein grosser
-            # Indexierungslauf den Speicher vollaeuft.
-            if pool is not None:
-                with pool():
-                    text = _vision_text_aus_png(puffer.getvalue())
-            else:
+        # Autorelease-Pool pro Seite: ohne ihn sammeln sich die von
+        # Vision erzeugten Objective-C-Objekte an, bis ein grosser
+        # Indexierungslauf den Speicher vollaeuft.
+        if pool is not None:
+            with pool():
                 text = _vision_text_aus_png(puffer.getvalue())
+        else:
+            text = _vision_text_aus_png(puffer.getvalue())
 
-            if text.strip():
-                teile.append(text)
-        return "\n".join(teile)
-    finally:
-        try:
-            dokument.close()
-        except Exception:
-            pass
+        if text.strip():
+            teile.append(text)
+    return "\n".join(teile)
 
 
 # ---------------------------------------------------------------------------
@@ -193,16 +227,7 @@ def _ocr_mit_tesseract(pfad):
     # Seiten bevorzugt mit pypdfium2 rendern - dann wird poppler auch auf
     # dem Notnagel-Pfad nicht mehr gebraucht.
     if _pruefe_pdfium():
-        import pypdfium2 as pdfium
-        dokument = pdfium.PdfDocument(pfad)
-        try:
-            bilder = [dokument[i].render(scale=OCR_DPI / 72).to_pil()
-                      for i in range(min(len(dokument), OCR_MAX_SEITEN))]
-        finally:
-            try:
-                dokument.close()
-            except Exception:
-                pass
+        bilder = _seiten_als_bilder(pfad)
     else:
         from pdf2image import convert_from_path
         bilder = convert_from_path(pfad, first_page=1, last_page=OCR_MAX_SEITEN, dpi=OCR_DPI)

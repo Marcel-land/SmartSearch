@@ -144,8 +144,10 @@ def _nachrechnen(anfrage, vektor, werte, nach_datei):
         elif gesamt <= s.SCORE_SCHWELLE:
             grund = "unter SCORE_SCHWELLE"
         zeilen.append([os.path.basename(pfad), bester, sem_norm, gefunden, len(woerter),
-                       stich, gesamt, grund])
-    zeilen.sort(key=lambda z: -z[6])
+                       stich, gesamt, grund, pfad])
+    zeilen.sort(key=lambda z: (-z[6], -z[1], z[8]))   # wie in kern/suche.py
+    for z in zeilen:
+        z.pop()
     ueberlebende = [z for z in zeilen if not z[7]]
     if ueberlebende:
         grenze = ueberlebende[0][6] * s.RELATIVER_ABSTAND

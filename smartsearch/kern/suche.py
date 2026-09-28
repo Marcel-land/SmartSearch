@@ -242,9 +242,16 @@ def suche_intern(anfrage, top_n=10, ausgeschlossene_typen=None, zeitraum=None):
             continue
 
         if gesamt_score > SCORE_SCHWELLE:
-            rohe_treffer.append((gesamt_score, bester_abschnitt))
+            rohe_treffer.append((gesamt_score, bester_semantik, pfad, bester_abschnitt))
 
-    rohe_treffer.sort(key=lambda x: x[0], reverse=True)
+    # Bei gleichem Gesamtwert entscheidet die rohe Aehnlichkeit, danach der
+    # Pfad. Gleichstand ist haeufig: semantik_norm wird bei der OBERGRENZE
+    # auf 1 gekappt, dann haben mehrere Dokumente exakt denselben Wert.
+    # Ohne diese Regel entschied die zufaellige Reihenfolge, in der die
+    # Dateien eingelesen wurden - dieselbe Suche lieferte bei jedem
+    # Indexlauf eine andere Reihenfolge (gemessen 28.09.2026).
+    rohe_treffer.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    rohe_treffer = [(gesamt, abschnitt) for gesamt, _, _, abschnitt in rohe_treffer]
 
     # Abstand zum besten Treffer auswerten - siehe RELATIVER_ABSTAND.
     if rohe_treffer:

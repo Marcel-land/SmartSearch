@@ -25,11 +25,22 @@ APP_VERSION = re.search(
     (ROOT / "smartsearch" / "version.py").read_text(encoding="utf-8"),
 ).group(1)
 
-# Das Suchmodell (ONNX-Datei + Tokenizer) liegt in ressourcen/modell/ und
-# kommt mit dem Ordner ressourcen/ unten in die App. Fehlt es, bricht der
-# Bau hier ab - eine App ohne Modell kann nicht suchen.
-if not (ROOT / 'ressourcen' / 'modell').is_dir():
+# Das Suchmodell liegt in ressourcen/modell/ (nicht im Repository). In die
+# App kommen nur die Dateien aus modell.AUSLIEFERN - das grosse Quellmodell
+# (390 MB), aus dem die ausgelieferte Datei abgeleitet ist, bleibt draussen.
+# Fehlt etwas, bricht der Bau hier ab: eine App ohne Modell kann nicht suchen.
+import sys  # noqa: E402
+sys.path.insert(0, str(ROOT))
+from smartsearch.kern import modell  # noqa: E402
+if not modell.modell_ist_vorhanden():
     raise SystemExit("Suchmodell fehlt - zuerst: venv/bin/python -m werkzeuge.modell_holen")
+modell_dateien = []
+for datei in modell.AUSLIEFERN:
+    quelle = pathlib.Path(modell.modell_pfad(datei))
+    if not quelle.is_file():
+        raise SystemExit(f"Suchmodell unvollstaendig, es fehlt: {quelle}")
+    ziel = pathlib.Path('ressourcen') / modell.MODELL_ORDNER / datei
+    modell_dateien.append((str(quelle), str(ziel.parent)))
 
 # onnxruntime bringt eigene Bibliotheken mit, die PyInstaller nur ueber
 # collect_dynamic_libs sicher findet.
@@ -45,7 +56,7 @@ a = Analysis(
     # ressourcen/ (Symbole) liest das Programm zur Laufzeit ueber
     # pfade.ressource() - siehe dort.
     datas=[(str(ROOT / 'LICENSE.txt'), '.'),
-           (str(ROOT / 'ressourcen'), 'ressourcen')],
+           (str(ROOT / 'ressourcen' / 'icons'), 'ressourcen/icons')] + modell_dateien,
     hiddenimports=[
         'onnxruntime',
         'tokenizers',

@@ -11,8 +11,9 @@ Warum der Wechsel
    aktuellen Fassung (letzte: 2.2.2, ohne Python 3.13). onnxruntime laeuft
    auf Mac (Apple-Chip und Intel) und Windows mit derselben Fassung.
 2. Groesse: BGE-M3 wog 2,27 GB und wurde beim ersten Start aus dem Netz
-   geladen. granite-embedding-97m-multilingual-r2 wiegt als int8-ONNX rund
-   100 MB und wird MIT DER APP AUSGELIEFERT. Es gibt keinen Download mehr,
+   geladen. granite-embedding-97m-multilingual-r2 wiegt nach unserer
+   Verkleinerung (siehe MODELL_DATEI) rund 100 MB und wird MIT DER APP
+   AUSGELIEFERT. Es gibt keinen Download mehr,
    keine Verbindung zu huggingface.co, auch nicht beim ersten Start. Fuer
    Kanzleien ("nichts verlaesst den Rechner") ist das ein Argument, fuer
    Rechner ohne Internet die Voraussetzung.
@@ -45,12 +46,33 @@ MODELL_NAME = "ibm-granite/granite-embedding-97m-multilingual-r2"
 # Ordner unter ressourcen/ und die Dateien darin.
 MODELL_ORDNER = "modell/granite-embedding-97m-multilingual-r2"
 
-# Welche ONNX-Datei benutzt wird. IBM liefert zwei:
-#   onnx/model.onnx              ~390 MB, volle Genauigkeit (float32)
-#   onnx/model_quint8_avx2.onnx   ~98 MB, auf 8 Bit verkleinert
-# Welche ausgeliefert wird, entscheidet die Messung mit
-# werkzeuge/modellvergleich.py - nicht das Bauchgefuehl. Umstellen nur hier.
-MODELL_DATEI = "onnx/model_quint8_avx2.onnx"
+# Welche ONNX-Datei benutzt wird.
+#
+# IBM liefert zwei: onnx/model.onnx (390 MB, volle Genauigkeit) und
+# onnx/model_quint8_avx2.onnx (98 MB). Die kleine ist fuer uns
+# UNBRAUCHBAR - gemessen am 28.09.2026:
+#   - Sie rechnet Aktivierungen je Stapel neu auf 8 Bit um. Derselbe Text
+#     bekommt dadurch einen anderen Vektor, je nachdem, mit welchen anderen
+#     Texten er zusammen berechnet wird (Kosinus nur 0,945 zu sich selbst).
+#   - Suchqualitaet an den Testdokumenten: 4 von 10 richtigen Dokumenten
+#     vorn, gegen 9 von 10 mit dem grossen Modell.
+#
+# Deshalb verkleinert werkzeuge/modell_holen.py das grosse Modell selbst,
+# und zwar nur die GEWICHTE (Worttabelle je Zeile auf 8 Bit, Matrizen in
+# 32er-Bloecken auf 8 Bit), gerechnet wird weiter in voller Genauigkeit:
+#   - 102 MB statt 390 MB
+#   - Kosinus zum grossen Modell mindestens 0,9998 - die Suchergebnisse
+#     sind dieselben
+#   - unabhaengig davon, welche Texte zusammen berechnet werden
+# Umstellen nur hier; die Messung dazu: werkzeuge/mac/SUCHE PRUEFEN.command
+MODELL_DATEI = "onnx/model_smartsearch_int8.onnx"
+QUELL_DATEI = "onnx/model.onnx"
+TOKENIZER_DATEI = "tokenizer.json"
+
+# Was in die ausgelieferte App kommt (bauen/*/SmartSearch.spec liest das).
+# Das grosse Quellmodell bleibt draussen.
+AUSLIEFERN = [TOKENIZER_DATEI, "config.json", "README.md", "LIZENZ.txt",
+              "PRUEFSUMMEN.txt", MODELL_DATEI]
 
 # Nur fuer Messungen (werkzeuge/such_diagnose.py): eine andere Datei
 # ausprobieren, ohne den Code zu aendern. Die ausgelieferte App setzt das nie.
@@ -100,7 +122,10 @@ class OnnxModell:
 
         self.tokenizer = Tokenizer.from_file(tokenizer_datei)
         self.tokenizer.enable_truncation(max_length=MAX_TOKEN)
-        self.tokenizer.enable_padding()
+        # Fuellzeichen fuer kuerzere Texte im selben Stapel: das des Modells
+        # (bei granite "<|endoftext|>"), nicht die Voreinstellung id 0.
+        if self.tokenizer.padding is None:
+            self.tokenizer.enable_padding()
 
         optionen = ort.SessionOptions()
         if threads:

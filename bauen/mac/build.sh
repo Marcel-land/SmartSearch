@@ -84,7 +84,7 @@ fi
 
 # Das Suchmodell gehoert in die App, liegt aber nicht im Repository.
 if ! python3 -c "from smartsearch.kern import modell; raise SystemExit(0 if modell.modell_ist_vorhanden() else 1)"; then
-    echo "  Suchmodell fehlt - wird geladen (einmalig, rund 100 MB)"
+    echo "  Suchmodell fehlt - wird geladen und verkleinert (einmalig, rund 415 MB Download)"
     python3 -m werkzeuge.modell_holen || { rot "Suchmodell konnte nicht geladen werden."; exit 1; }
 fi
 

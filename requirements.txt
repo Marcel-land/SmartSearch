@@ -38,6 +38,7 @@ pyobjc-framework-Vision ; sys_platform == "darwin"
 # kern/modell.py) - das spart rund 2 GB.
 onnxruntime==1.23.2
 tokenizers
+onnx                                        # nur zum Verkleinern des Modells (modell_holen), nicht in der App
 numpy
 langchain-text-splitters                    # Aufteilung in Textabschnitte
 # Das Modell selbst kommt nicht ueber pip, sondern mit

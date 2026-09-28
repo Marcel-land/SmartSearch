@@ -22,7 +22,7 @@ py -3.13 -m venv venv
 venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-Danach einmal das Suchmodell holen (rund 100 MB, liegt nicht im Repository):
+Danach einmal das Suchmodell holen. Es liegt nicht im Repository; geladen werden rund 415 MB, daraus entsteht die 100 MB große Fassung, die in die App kommt:
 
 ```
 venv/bin/python -m werkzeuge.modell_holen

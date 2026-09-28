@@ -6,8 +6,9 @@
 # eigenen, leeren Ordner. Der Index, mit dem die App arbeitet, bleibt
 # unberuehrt. Ergebnis: such-diagnose.txt im Projektordner.
 #
-# Liegt das grosse float32-Modell vor (modell_holen --alle), wird es
-# zusaetzlich gemessen: such-diagnose-float32.txt.
+# Zusaetzlich wird das grosse Quellmodell gemessen, aus dem die
+# ausgelieferte Fassung abgeleitet ist: such-diagnose-float32.txt. Beide
+# muessen dasselbe Ergebnis liefern - sonst hat das Verkleinern geschadet.
 
 # Liegt zwei Ebenen unter dem Projektordner - dort wird gearbeitet.
 cd "$(dirname "$0")/../.." || exit 1

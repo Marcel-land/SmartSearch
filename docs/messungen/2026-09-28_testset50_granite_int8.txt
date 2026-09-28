@@ -1,0 +1,338 @@
+Erste Messung am erweiterten Testset: 50 Dokumente, 67 Suchanfragen (tests/suchfaelle.py).
+granite-embedding-97m-multilingual-r2, selbst verkleinert (int8), Texterkennung Apple Vision.
+Gemessen am 28.09.2026 auf Marcels Mac mit werkzeuge/mac/SUCHE PRUEFEN.command,
+nach Behebung des pdfium-Absturzes (Commit 8e017e5).
+
+Ergebnis: 48 von 67 richtig, 108 Fehlgriffe.
+Zum Vergleich unverkleinertes Modell (float32): 49 von 67, 107 Fehlgriffe.
+Nur die zehn alten Dokumente (--klein): weiter 11 von 12.
+Cloud mit Tesseract statt Vision: 43 von 67 - Vision liest die Scans deutlich besser.
+
+Schwaechen, die diese Messung zeigt (Ausgangspunkt fuer die Verbesserung):
+  - Suche nach Bedeutung: 0 von 7 (Urlaub, GEZ, Gehaltsabrechnung ...)
+  - Negativtests: 3 von 4 zeigen trotzdem Treffer
+  - Scans landen oft auf Platz 2 hinter einem verwandten Textdokument
+
+==============================================================================
+SUCHDIAGNOSE
+==============================================================================
+Modell    : ibm-granite/granite-embedding-97m-multilingual-r2
+Datei     : onnx/model_smartsearch_int8.onnx
+Texterk.  : vision
+Lade Suchmodell (ibm-granite/granite-embedding-97m-multilingual-r2, onnx/model_smartsearch_int8.onnx)...
+Laden     : 0.4 s
+Testmodus : frischer Index aus /Users/marcellandmann/Projekt/SmartSearch/App/tests/testdokumente
+            (eigener Datenordner, der echte Index bleibt unberuehrt)
+Indexieren: 11.4 s
+Indexdatei: /var/folders/84/lqmjdljd2y5czw2crbz0rhd80000gn/T/smartsearch-messung-knac6iow/index.pkl
+
+Geltende Werte (kern/suche.py):
+  SCORE_SCHWELLE 0.15 · SEMANTIK_MINDEST_OHNE_TREFFER 0.75 · SEMANTIK 0.72–0.87
+  GEWICHT 0.65/0.35 · RELATIVER_ABSTAND 0.75
+
+Dokumente im Index: 50   Textabschnitte: 204
+
+ok [alltag] 'Vertrag'  ->  9 Treffer, 3 Fehlgriff(e)
+ok [alltag] 'Verträge'  ->  10 Treffer, 3 Fehlgriff(e)
+ok [alltag] 'Auto'  ->  3 Treffer
+ok [alltag] 'Fahrzeug'  ->  5 Treffer
+ok [alltag] 'Versicherung fürs Auto'  ->  6 Treffer, 4 Fehlgriff(e)
+ok [alltag] 'Unterlagen rund ums Fahrzeug'  ->  7 Treffer, 1 Fehlgriff(e)
+ok [alltag] 'Was zahle ich jeden Monat?'  ->  1 Treffer
+XX [alltag] 'Drucker'  ->  2 Treffer, 1 Fehlgriff(e)
+      0027_2607_001.pdf fehlt, vorn steht Zeugnis_final.docx
+      Suchwoerter: ['drucker']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Zeugnis_final.docx                  0.831  0.742  0/1    0.483  ANGEZEIGT
+        manual_EN.pdf                       0.822  0.680  0/1    0.442  ANGEZEIGT
+      * 0027_2607_001.pdf                   0.788  0.453  0/1    0.294  raus: Abstandsregel (< 0.362)
+        notizen.txt                         0.779  0.392  0/1    0.255  raus: Abstandsregel (< 0.362)
+        IMG_4471.pdf                        0.778  0.387  0/1    0.251  raus: Abstandsregel (< 0.362)
+        Satzung_Entwurf.pdf                 0.776  0.376  0/1    0.245  raus: Abstandsregel (< 0.362)
+
+ok [alltag] 'Heizung gewartet'  ->  1 Treffer
+ok [alltag] 'Spende für die Steuererklärung'  ->  5 Treffer, 3 Fehlgriff(e)
+XX [alltag] 'Waschmaschine'  ->  2 Treffer, 1 Fehlgriff(e)
+      Unbenannt-3.pdf erst auf Platz 2, davor manual_EN.pdf
+      Suchwoerter: ['waschmaschine']
+        Datei                                 roh   semN  wört  gesamt  Status
+        manual_EN.pdf                       0.815  0.636  0/1    0.413  ANGEZEIGT
+      * Unbenannt-3.pdf                     0.796  0.507  0/1    0.329  ANGEZEIGT
+        notizen.txt                         0.790  0.465  0/1    0.303  raus: Abstandsregel (< 0.310)
+        Scan_20240415_0001.pdf              0.766  0.305  0/1    0.198  raus: Abstandsregel (< 0.310)
+        Schreiben_Vermieter.docx            0.754  0.230  0/1    0.149  raus: unter SCORE_SCHWELLE
+        Mappe1.xlsx                         0.748  0.189  0/1    0.123  raus: Semantik-Sperre (0.748 < 0.75)
+
+ok [alltag] 'Strom'  ->  2 Treffer
+ok [stichwort] 'Rundfunkbeitrag'  ->  1 Treffer
+ok [stichwort] 'Abfindung'  ->  1 Treffer
+ok [stichwort] 'Testament'  ->  1 Treffer
+ok [stichwort] 'Stammkapital'  ->  1 Treffer
+ok [stichwort] 'Fliesen'  ->  1 Treffer
+XX [stichwort] 'Nebenkostenabrechnung'  ->  10 Treffer, 9 Fehlgriff(e)
+      Abrechnung_HV_2023.pdf erst auf Platz 4, davor 20220906_0001.pdf
+      Suchwoerter: ['nebenkostenabrechnung']
+        Datei                                 roh   semN  wört  gesamt  Status
+        20220906_0001.pdf                   0.851  0.874  0/1    0.568  ANGEZEIGT
+        Scan_20240712_0002.pdf              0.850  0.865  0/1    0.562  ANGEZEIGT
+        Kostenrechnung_2024-0391.pdf        0.848  0.852  0/1    0.554  ANGEZEIGT
+      * Abrechnung_HV_2023.pdf              0.845  0.835  0/1    0.543  ANGEZEIGT
+        Verguetungsvereinbarung_Muster.do…  0.841  0.808  0/1    0.525  ANGEZEIGT
+        Scan_20240131_0001.pdf              0.832  0.748  0/1    0.486  ANGEZEIGT
+
+ok [stichwort] 'Arbeitszeugnis'  ->  1 Treffer
+ok [stichwort] 'Scheidung'  ->  1 Treffer
+ok [stichwort] 'Reisekosten'  ->  2 Treffer, 1 Fehlgriff(e)
+XX [bedeutung] 'GEZ'  ->  8 Treffer, 8 Fehlgriff(e)
+      Schreiben_0412.pdf fehlt, vorn steht IMG_5102.pdf
+      Suchwoerter: ['gez']
+        Datei                                 roh   semN  wört  gesamt  Status
+        IMG_5102.pdf                        0.826  0.708  0/1    0.460  ANGEZEIGT
+        20220906_0001.pdf                   0.808  0.588  0/1    0.382  ANGEZEIGT
+        IMG_4471.pdf                        0.805  0.565  0/1    0.367  ANGEZEIGT
+        Kostenrechnung_2024-0391.pdf        0.804  0.562  0/1    0.366  ANGEZEIGT
+        Fristen.xlsx                        0.803  0.554  0/1    0.360  ANGEZEIGT
+        Berechnung_KU.xlsx                  0.803  0.551  0/1    0.358  ANGEZEIGT
+      * Schreiben_0412.pdf                  0.777  0.381  0/1    0.248  raus: Abstandsregel (< 0.345)
+
+XX [bedeutung] 'Handyvertrag'  ->  7 Treffer, 5 Fehlgriff(e)
+      VZF_48213.pdf erst auf Platz 7, davor Verguetungsvereinbarung_Muster.docx
+      Suchwoerter: ['handyvertrag']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Verguetungsvereinbarung_Muster.do…  0.856  0.907  0/1    0.589  ANGEZEIGT
+        Satzung_Entwurf.pdf                 0.837  0.779  0/1    0.506  ANGEZEIGT
+        NDA_Northbridge.docx                0.833  0.751  0/1    0.488  ANGEZEIGT
+        AVV_Cloudanbieter_unterschrieben.…  0.827  0.713  0/1    0.463  ANGEZEIGT
+        Scan_20240610_0001.pdf              0.826  0.706  0/1    0.459  ANGEZEIGT
+        Scan2019-03-22_112.pdf              0.823  0.687  0/1    0.447  ANGEZEIGT
+      * VZF_48213.pdf                       0.822  0.683  0/1    0.444  ANGEZEIGT
+
+XX [bedeutung] 'Gehaltsabrechnung'  ->  1 Treffer, 1 Fehlgriff(e)
+      Scan_20240131_0001.pdf fehlt, vorn steht Aufhebungsvertrag_Entwurf.docx
+      Suchwoerter: ['gehaltsabrechnung']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Aufhebungsvertrag_Entwurf.docx      0.842  0.815  1/1    0.880  ANGEZEIGT
+        Verguetungsvereinbarung_Muster.do…  0.861  0.943  0/1    0.613  raus: Abstandsregel (< 0.660)
+      * Scan_20240131_0001.pdf              0.848  0.856  0/1    0.556  raus: Abstandsregel (< 0.660)
+        Berechnung_KU.xlsx                  0.846  0.841  0/1    0.547  raus: Abstandsregel (< 0.660)
+        IMG_5102.pdf                        0.840  0.803  0/1    0.522  raus: Abstandsregel (< 0.660)
+        Präsentation1.pptx                  0.836  0.774  0/1    0.503  raus: Abstandsregel (< 0.660)
+
+XX [bedeutung] 'Fitnessstudio kündigen'  ->  3 Treffer, 2 Fehlgriff(e)
+      Dokument1.docx erst auf Platz 2, davor KSK_Wortmann.docx
+      Suchwoerter: ['fitnessstudio', 'kündigen']
+        Datei                                 roh   semN  wört  gesamt  Status
+        KSK_Wortmann.docx                   0.816  0.638  1/2    0.589  ANGEZEIGT
+      * Dokument1.docx                      0.811  0.609  1/2    0.571  ANGEZEIGT
+        Abmahnung_2023.pdf                  0.788  0.452  1/2    0.469  ANGEZEIGT
+        VZF_48213.pdf                       0.772  0.344  1/2    0.398  raus: Abstandsregel (< 0.442)
+        Aufhebungsvertrag_Entwurf.docx      0.760  0.264  1/2    0.346  raus: Abstandsregel (< 0.442)
+        notiz_2024-03-05.md                 0.785  0.436  0/2    0.283  raus: Abstandsregel (< 0.442)
+
+XX [bedeutung] 'Anwaltsrechnung'  ->  10 Treffer, 7 Fehlgriff(e)
+      Kostenrechnung_2024-0391.pdf erst auf Platz 2, davor Verguetungsvereinbarung_Muster.docx
+      Suchwoerter: ['anwaltsrechnung']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Verguetungsvereinbarung_Muster.do…  0.853  0.887  0/1    0.577  ANGEZEIGT
+      * Kostenrechnung_2024-0391.pdf        0.844  0.829  0/1    0.539  ANGEZEIGT
+        Scan_20240131_0001.pdf              0.838  0.784  0/1    0.510  ANGEZEIGT
+        Scan_0042.pdf                       0.834  0.759  0/1    0.493  ANGEZEIGT
+        Satzung_Entwurf.pdf                 0.833  0.756  0/1    0.492  ANGEZEIGT
+        Brief_Mandant_0314.docx             0.833  0.753  0/1    0.489  ANGEZEIGT
+
+XX [bedeutung] 'Urlaub'  ->  2 Treffer, 2 Fehlgriff(e)
+      Buchungsbestaetigung.pdf fehlt, vorn steht Scan_20240131_0001.pdf
+      Suchwoerter: ['urlaub']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Scan_20240131_0001.pdf              0.768  0.319  1/1    0.558  ANGEZEIGT
+        notizen.txt                         0.748  0.184  1/1    0.470  ANGEZEIGT
+        0044_1802_002.pdf                   0.799  0.528  0/1    0.343  raus: Abstandsregel (< 0.418)
+      * Buchungsbestaetigung.pdf            0.775  0.367  0/1    0.239  raus: Abstandsregel (< 0.418)
+        Mappe1.xlsx                         0.769  0.325  0/1    0.211  raus: Abstandsregel (< 0.418)
+        20220906_0001.pdf                   0.764  0.295  0/1    0.192  raus: Abstandsregel (< 0.418)
+
+XX [bedeutung] 'Mitgliedsbeitrag im Sportverein'  ->  4 Treffer, 2 Fehlgriff(e)
+      Präsentation1.pptx erst auf Platz 2, davor Dokument1.docx
+      Suchwoerter: ['mitgliedsbeitrag', 'sportverein']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Dokument1.docx                      0.848  0.854  0/2    0.555  ANGEZEIGT
+      * Präsentation1.pptx                  0.845  0.837  0/2    0.544  ANGEZEIGT
+        CCF_000141.pdf                      0.842  0.811  0/2    0.527  ANGEZEIGT
+        Schreiben_0412.pdf                  0.831  0.743  0/2    0.483  ANGEZEIGT
+        Satzung_Entwurf.pdf                 0.792  0.482  0/2    0.313  raus: Abstandsregel (< 0.416)
+        IMG_5102.pdf                        0.786  0.443  0/2    0.288  raus: Abstandsregel (< 0.416)
+
+ok [frage] 'Wie viel habe ich für Lebensmittel ausgegeben?'  ->  2 Treffer, 1 Fehlgriff(e)
+ok [frage] 'Wann läuft die Berufungsfrist ab?'  ->  1 Treffer
+ok [frage] 'Bin ich versichert, wenn mein Fahrrad gestohlen wird?'  ->  1 Treffer
+ok [frage] 'Wann geht der Flug nach Mallorca?'  ->  1 Treffer
+ok [frage] 'Wie viel Unterhalt bekommen die Kinder?'  ->  2 Treffer
+XX [frage] 'Wie hoch ist die Steuererstattung?'  ->  10 Treffer, 9 Fehlgriff(e)
+      Scan_20240712_0002.pdf erst auf Platz 2, davor Kostenrechnung_2024-0391.pdf
+      Suchwoerter: ['hoch', 'steuererstattung']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Kostenrechnung_2024-0391.pdf        0.883  1.000  0/2    0.650  ANGEZEIGT
+      * Scan_20240712_0002.pdf              0.875  1.000  0/2    0.650  ANGEZEIGT
+        dok_2024_02_18.pdf                  0.858  0.917  0/2    0.596  ANGEZEIGT
+        Scan_20240131_0001.pdf              0.855  0.902  0/2    0.586  ANGEZEIGT
+        Klage_Albers_v2.docx                0.848  0.855  0/2    0.555  ANGEZEIGT
+        CCF_000141.pdf                      0.848  0.854  0/2    0.555  ANGEZEIGT
+
+ok [frage] 'Wann ist der Gütetermin?'  ->  4 Treffer
+ok [fach] '§ 4 KSchG'  ->  2 Treffer
+ok [fach] '3 C 118/24'  ->  10 Treffer, 8 Fehlgriff(e)
+ok [fach] 'Verfahrensgebühr Nr. 3100 VV RVG'  ->  1 Treffer
+ok [fach] 'Versorgungsausgleich'  ->  2 Treffer
+ok [fach] 'Pflichtteilsstrafklausel'  ->  1 Treffer
+ok [fach] 'Auftragsverarbeitung nach DSGVO'  ->  1 Treffer
+ok [fach] 'elektronisches Empfangsbekenntnis'  ->  1 Treffer
+ok [fach] 'Sozialauswahl'  ->  1 Treffer
+ok [fach] 'Abmahnung wegen Zuspätkommen'  ->  1 Treffer
+ok [fach] 'Vorschuss vom Mandanten anfordern'  ->  1 Treffer
+ok [fach] 'Aktennotiz über das Telefonat mit der Mandantin'  ->  1 Treffer
+ok [fach] 'Räumungsklage wegen Mietrückstand'  ->  4 Treffer, 3 Fehlgriff(e)
+ok [fach] 'Mietminderung wegen Schimmel'  ->  1 Treffer
+ok [fach] 'Erbschein beantragen'  ->  2 Treffer, 1 Fehlgriff(e)
+ok [fach] 'Stundenhonorar des Anwalts'  ->  1 Treffer
+ok [fach] 'Rücktritt vom Autokauf wegen verschwiegenem Unfallschaden'  ->  1 Treffer
+ok [sprache] 'Kaffeemaschine entkalken'  ->  1 Treffer
+XX [sprache] 'Geheimhaltungsvereinbarung'  ->  2 Treffer, 2 Fehlgriff(e)
+      NDA_Northbridge.docx fehlt, vorn steht Verguetungsvereinbarung_Muster.docx
+      Suchwoerter: ['geheimhaltungsvereinbarung']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Verguetungsvereinbarung_Muster.do…  0.848  0.854  0/1    0.555  ANGEZEIGT
+        Fristen.xlsx                        0.816  0.643  0/1    0.418  ANGEZEIGT
+        Scan_20231114_0003.pdf              0.808  0.587  0/1    0.382  raus: Abstandsregel (< 0.416)
+      * NDA_Northbridge.docx                0.806  0.573  0/1    0.373  raus: Abstandsregel (< 0.416)
+        notiz_2024-03-05.md                 0.794  0.490  0/1    0.319  raus: Abstandsregel (< 0.416)
+        VS-2291-0087.pdf                    0.793  0.490  0/1    0.318  raus: Abstandsregel (< 0.416)
+
+XX [scan] 'Reifenwechsel'  ->  3 Treffer, 2 Fehlgriff(e)
+      Scan_20240415_0001.pdf erst auf Platz 2, davor notizen.txt
+      Suchwoerter: ['reifenwechsel']
+        Datei                                 roh   semN  wört  gesamt  Status
+        notizen.txt                         0.812  0.611  0/1    0.397  ANGEZEIGT
+      * Scan_20240415_0001.pdf              0.800  0.537  0/1    0.349  ANGEZEIGT
+        Gutachten_Scan.pdf                  0.794  0.496  0/1    0.323  ANGEZEIGT
+        manual_EN.pdf                       0.785  0.434  0/1    0.282  raus: Abstandsregel (< 0.298)
+        Schreiben_Vermieter.docx            0.778  0.387  0/1    0.251  raus: Abstandsregel (< 0.298)
+        Dokument1.docx                      0.776  0.376  0/1    0.244  raus: Abstandsregel (< 0.298)
+
+ok [scan] 'Rechnung vom Zahnarzt'  ->  1 Treffer
+ok [scan] 'Mahnbescheid'  ->  1 Treffer
+ok [scan] 'Prozessvollmacht'  ->  6 Treffer, 4 Fehlgriff(e)
+XX [scan] 'Gutachten zum Unfallschaden'  ->  2 Treffer
+      Gutachten_Scan.pdf erst auf Platz 2, davor Berufungsbegruendung.pdf
+      Suchwoerter: ['gutachten', 'unfallschaden']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Berufungsbegruendung.pdf            0.875  1.000  2/2    1.000  ANGEZEIGT
+      * Gutachten_Scan.pdf                  0.844  0.828  1/2    0.766  ANGEZEIGT
+        Klage_Albers_v2.docx                0.852  0.881  1/2    0.748  raus: Abstandsregel (< 0.750)
+        VS-2291-0087.pdf                    0.880  1.000  0/2    0.650  raus: Abstandsregel (< 0.750)
+        Neues_Dokument_7.pdf                0.842  0.814  0/2    0.529  raus: Abstandsregel (< 0.750)
+        Scan_Urteil_AG.pdf                  0.835  0.764  0/2    0.497  raus: Abstandsregel (< 0.750)
+
+XX [scan] 'Urteil zum Verkehrsunfall'  ->  5 Treffer, 3 Fehlgriff(e)
+      Scan_Urteil_AG.pdf erst auf Platz 3, davor Berufungsbegruendung.pdf
+      Suchwoerter: ['urteil', 'verkehrsunfall']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Berufungsbegruendung.pdf            0.860  0.932  1/2    0.781  ANGEZEIGT
+        Brief_Mandant_0314.docx             0.854  0.894  1/2    0.756  ANGEZEIGT
+      * Scan_Urteil_AG.pdf                  0.830  0.737  1/2    0.706  ANGEZEIGT
+        Klage_Albers_v2.docx                0.841  0.808  1/2    0.700  ANGEZEIGT
+        Scan_0042.pdf                       0.829  0.729  1/2    0.649  ANGEZEIGT
+        VS-2291-0087.pdf                    0.844  0.829  0/2    0.539  raus: Abstandsregel (< 0.586)
+
+XX [thema] 'Unterlagen zum Unfall von Herrn Albers'  ->  2 Treffer
+      fehlt: Scan_Urteil_AG.pdf, Gutachten_Scan.pdf
+      Suchwoerter: ['unterlagen', 'unfall', 'herrn', 'albers']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Brief_Mandant_0314.docx             0.898  1.000  3/4    0.912  ANGEZEIGT
+      * Klage_Albers_v2.docx                0.855  0.897  3/4    0.898  ANGEZEIGT
+        Scan_0042.pdf                       0.834  0.760  2/4    0.669  raus: Abstandsregel (< 0.684)
+        Berufungsbegruendung.pdf            0.828  0.720  1/4    0.556  raus: Abstandsregel (< 0.684)
+      * Scan_Urteil_AG.pdf                  0.807  0.578  2/4    0.551  raus: Abstandsregel (< 0.684)
+        Kostenrechnung_2024-0391.pdf        0.802  0.546  2/4    0.530  raus: Abstandsregel (< 0.684)
+      * Gutachten_Scan.pdf                  0.785  0.432  1/4    0.369  raus: Abstandsregel (< 0.684)
+
+ok [thema] 'Arbeitsgerichtsverfahren Wortmann'  ->  4 Treffer
+ok [thema] 'Versicherungen'  ->  10 Treffer, 6 Fehlgriff(e)
+ok [thema] 'Rechnungen fürs Auto'  ->  6 Treffer, 4 Fehlgriff(e)
+ok [negativ] 'Rezept für Apfelkuchen'  ->  0 Treffer
+XX [negativ] 'Bewerbung als Pilot'  ->  3 Treffer, 3 Fehlgriff(e)
+      sollte nichts zeigen, zeigt 3: NDA_Northbridge.docx, Scan_20240131_0001.pdf, Zeugnis_final.docx
+      Suchwoerter: ['bewerbung', 'pilot']
+        Datei                                 roh   semN  wört  gesamt  Status
+        NDA_Northbridge.docx                0.767  0.315  0/2    0.205  ANGEZEIGT
+        Scan_20240131_0001.pdf              0.765  0.302  0/2    0.197  ANGEZEIGT
+        Zeugnis_final.docx                  0.764  0.294  0/2    0.191  ANGEZEIGT
+        Aufhebungsvertrag_Entwurf.docx      0.755  0.233  0/2    0.152  raus: Abstandsregel (< 0.153)
+        Abmahnung_2023.pdf                  0.751  0.205  0/2    0.133  raus: unter SCORE_SCHWELLE
+        Schulung_ERV_2024.pptx              0.749  0.190  0/2    0.124  raus: Semantik-Sperre (0.749 < 0.75)
+
+XX [negativ] 'Gästeliste für die Hochzeit'  ->  7 Treffer, 7 Fehlgriff(e)
+      sollte nichts zeigen, zeigt 7: notiz_2024-03-05.md, Verguetungsvereinbarung_Muster.docx, Schreiben_Vermieter.docx
+      Suchwoerter: ['gästeliste', 'hochzeit']
+        Datei                                 roh   semN  wört  gesamt  Status
+        notiz_2024-03-05.md                 0.797  0.514  0/2    0.334  ANGEZEIGT
+        Verguetungsvereinbarung_Muster.do…  0.792  0.477  0/2    0.310  ANGEZEIGT
+        Schreiben_Vermieter.docx            0.783  0.422  0/2    0.274  ANGEZEIGT
+        Scan_20240610_0001.pdf              0.783  0.419  0/2    0.272  ANGEZEIGT
+        Brief_Mandant_0314.docx             0.782  0.414  0/2    0.269  ANGEZEIGT
+        Antrag_FamG.docx                    0.781  0.408  0/2    0.265  ANGEZEIGT
+
+XX [negativ] 'Gartenzaun streichen'  ->  2 Treffer, 2 Fehlgriff(e)
+      sollte nichts zeigen, zeigt 2: Gutachten_Scan.pdf, Scan_20240415_0001.pdf
+      Suchwoerter: ['gartenzaun', 'streichen']
+        Datei                                 roh   semN  wört  gesamt  Status
+        Gutachten_Scan.pdf                  0.756  0.238  0/2    0.154  ANGEZEIGT
+        Scan_20240415_0001.pdf              0.755  0.233  0/2    0.151  ANGEZEIGT
+        notizen.txt                         0.751  0.208  0/2    0.135  raus: unter SCORE_SCHWELLE
+        Scan_Urteil_AG.pdf                  0.750  0.202  0/2    0.131  raus: unter SCORE_SCHWELLE
+        Scan_20240610_0001.pdf              0.749  0.196  0/2    0.128  raus: Semantik-Sperre (0.749 < 0.75)
+        notiz_2024-03-05.md                 0.744  0.157  0/2    0.102  raus: Semantik-Sperre (0.744 < 0.75)
+
+
+==============================================================================
+ERGEBNIS: 48 von 67 Anfragen richtig   ·   108 Fehlgriffe insgesamt
+==============================================================================
+  Art           richtig  Fehlgriffe
+  alltag        10 / 12          16
+  stichwort      8 / 9           10
+  bedeutung      0 / 7           27
+  frage          6 / 7           10
+  fach          16 / 16          12
+  sprache        1 / 2            2
+  scan           3 / 6            9
+  thema          3 / 4           10
+  negativ        1 / 4           12
+
+  FALSCH  [alltag] 'Drucker': 0027_2607_001.pdf fehlt, vorn steht Zeugnis_final.docx
+  FALSCH  [alltag] 'Waschmaschine': Unbenannt-3.pdf erst auf Platz 2, davor manual_EN.pdf
+  FALSCH  [stichwort] 'Nebenkostenabrechnung': Abrechnung_HV_2023.pdf erst auf Platz 4, davor 20220906_0001.pdf
+  FALSCH  [bedeutung] 'GEZ': Schreiben_0412.pdf fehlt, vorn steht IMG_5102.pdf
+  FALSCH  [bedeutung] 'Handyvertrag': VZF_48213.pdf erst auf Platz 7, davor Verguetungsvereinbarung_Muster.docx
+  FALSCH  [bedeutung] 'Gehaltsabrechnung': Scan_20240131_0001.pdf fehlt, vorn steht Aufhebungsvertrag_Entwurf.docx
+  FALSCH  [bedeutung] 'Fitnessstudio kündigen': Dokument1.docx erst auf Platz 2, davor KSK_Wortmann.docx
+  FALSCH  [bedeutung] 'Anwaltsrechnung': Kostenrechnung_2024-0391.pdf erst auf Platz 2, davor Verguetungsvereinbarung_Muster.docx
+  FALSCH  [bedeutung] 'Urlaub': Buchungsbestaetigung.pdf fehlt, vorn steht Scan_20240131_0001.pdf
+  FALSCH  [bedeutung] 'Mitgliedsbeitrag im Sportverein': Präsentation1.pptx erst auf Platz 2, davor Dokument1.docx
+  FALSCH  [frage] 'Wie hoch ist die Steuererstattung?': Scan_20240712_0002.pdf erst auf Platz 2, davor Kostenrechnung_2024-0391.pdf
+  FALSCH  [sprache] 'Geheimhaltungsvereinbarung': NDA_Northbridge.docx fehlt, vorn steht Verguetungsvereinbarung_Muster.docx
+  FALSCH  [scan] 'Reifenwechsel': Scan_20240415_0001.pdf erst auf Platz 2, davor notizen.txt
+  FALSCH  [scan] 'Gutachten zum Unfallschaden': Gutachten_Scan.pdf erst auf Platz 2, davor Berufungsbegruendung.pdf
+  FALSCH  [scan] 'Urteil zum Verkehrsunfall': Scan_Urteil_AG.pdf erst auf Platz 3, davor Berufungsbegruendung.pdf
+  FALSCH  [thema] 'Unterlagen zum Unfall von Herrn Albers': fehlt: Scan_Urteil_AG.pdf, Gutachten_Scan.pdf
+  FALSCH  [negativ] 'Bewerbung als Pilot': sollte nichts zeigen, zeigt 3: NDA_Northbridge.docx, Scan_20240131_0001.pdf, Zeugnis_final.docx
+  FALSCH  [negativ] 'Gästeliste für die Hochzeit': sollte nichts zeigen, zeigt 7: notiz_2024-03-05.md, Verguetungsvereinbarung_Muster.docx, Schreiben_Vermieter.docx
+  FALSCH  [negativ] 'Gartenzaun streichen': sollte nichts zeigen, zeigt 2: Gutachten_Scan.pdf, Scan_20240415_0001.pdf
+
+Richtig = vorn steht das erwartete Dokument und alle Pflichtdokumente
+sind dabei. Fehlgriff = angezeigt, obwohl es nicht dazugehoert.
+Vor jeder Aenderung an Modell, Schwellen oder Aufteilung einmal messen,
+danach vergleichen. Soll-Antworten: tests/suchfaelle.py
+
+Rohwerte dieses Modells (Aehnlichkeit Anfrage <-> bester Abschnitt):
+  erwartete Dokumente: 0.748 bis 0.919  (Mittel 0.829)
+  uebrige Dokumente  : 0.659 bis 0.898  (Mittel 0.764)
+  Zeit je Suche      : 17 ms (wie in der App, mit Bewertung)
